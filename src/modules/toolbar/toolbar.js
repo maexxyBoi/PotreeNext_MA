@@ -140,7 +140,7 @@ export async function installToolbar(element, potree){
 			elMeasures.appendChild(elButton);
 		}
 
-		{ // CIRCLE
+		{ // CIRCLE //FIXME BUGGED AT MY LOCAL
 			let elButton = document.createElement("input");
 			elButton.classList.add("potree_toolbar_button");
 			elButton.type = "button";
@@ -150,6 +150,19 @@ export async function installToolbar(element, potree){
 			elMeasures.appendChild(elButton);
 		}
 
+		{ // INNER VOL
+			let elButton = document.createElement("input");
+			elButton.classList.add("potree_toolbar_button");
+			elButton.type = "button";
+			elButton.title = "Inner Volume";
+			elButton.style.backgroundImage = `url(${dir}/icons/innervolume.svg)`;
+			
+			elButton.addEventListener("click", () => {
+				potree.measure.startMeasuring(new InnerVolMeasure());
+			});
+
+			elMeasures.appendChild(elButton);
+		}
 	}
 
 	{ // GRADIENT

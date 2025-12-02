@@ -89,6 +89,22 @@ export class HeightMeasure extends Measure{
 
 };
 
+export class InnerVolMeasure extends Measure{
+
+	constructor(){
+		super();
+		this.requiredMarkers = 3;
+		this.maxMarkers = 100;
+	}
+
+	addMarker(position){
+		this.markers.push(position.clone());
+
+	}
+
+};
+
+
 export class MeasureTool{
 
 	constructor(potree){

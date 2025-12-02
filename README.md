@@ -1,4 +1,8 @@
-# About
+# About Adaptation
+
+This is just a fork of the original [PotreeNext](https://github.com/m-schuetz/Potree-Next), that i am using to visualize some of my measuring tools planned for gaussians and point clouds c:
+
+### Original About
 
 Potree is an Open Source viewer for massive point cloud data sets, capable of displaying data sets with billions of points in web browsers. 
 
@@ -17,7 +21,7 @@ A rewrite evidently has the disadvantage that many features that are currently p
 Potree-Next will eventually replace [Potree 1.8](https://github.com/potree/potree/) once it reaches maturity and reimplements most features; and WebGPU is widely supported on Linux and mobile browsers.
 
 
-# Examples
+### Examples
 
 <table>
 	<tr>

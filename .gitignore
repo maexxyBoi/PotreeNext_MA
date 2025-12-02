@@ -1,6 +1,7 @@
 pointclouds/test/
 nocommit/
 temp/
+resources/eclepens.potree
 resources/pointclouds/heidentor/hierarchy.bin
 resources/pointclouds/heidentor/metadata.json
 resources/pointclouds/heidentor/octree.bin

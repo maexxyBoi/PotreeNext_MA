@@ -1,6 +1,7 @@
 
 import {Gradients, Utils} from "potree";
 import {PointMeasure, DistanceMeasure, HeightMeasure} from "potree";
+
 let dir = new URL(import.meta.url + "/../").href;
 
 class Panel{
@@ -147,11 +148,10 @@ class Panel{
 
 						el.onmouseleave = () => {
 							measure.markers_highlighted[markerIndex] = false;
-							console.log("leavbe!");
+							console.log("leave!");
 						};
 					}
 				}
-
 			}
 		}
 

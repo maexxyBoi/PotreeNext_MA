@@ -661,6 +661,8 @@ function renderNotSoBasic(){
 
 			if(node?.constructor.name === "PointCloudOctreeNode"){
 
+
+
 				let pointBuffer = node.geometry.buffer;
 				let view = new DataView(pointBuffer);
 
@@ -675,6 +677,11 @@ function renderNotSoBasic(){
 				// z = z + node.octree.position.z;
 
 				// let position = new Vector3(x, y, z);
+				//FIXME JUST FOR TESTING=======================================================
+				//does work
+				//let position = new Vector3(0,0,0);
+
+				//END TEST======================================================================
 
 				Potree.pickPosition.copy(point.position);
 
@@ -686,7 +693,6 @@ function renderNotSoBasic(){
 					position: point.position,
 					object: node.octree,
 				};
-
 			}else if(node?.constructor.name === "Images360"){
 
 				let images = node;

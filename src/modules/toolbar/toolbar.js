@@ -1,6 +1,6 @@
 
 import {Gradients, Utils} from "potree";
-import {PointMeasure, DistanceMeasure, HeightMeasure} from "potree";
+import {PointMeasure, DistanceMeasure, HeightMeasure, InnerVolMeasure} from "potree";
 
 export async function installToolbar(element, potree){
 

@@ -106,5 +106,13 @@ export class Box3{
 	isFinite(){
 		return this.min.isFinite() && this.max.isFinite();
 	}
+	
+	intersectsBox( box ) {
 
+		// using 6 splitting planes to rule out intersections.
+		return box.max.x >= this.min.x && box.min.x <= this.max.x &&
+			box.max.y >= this.min.y && box.min.y <= this.max.y &&
+			box.max.z >= this.min.z && box.min.z <= this.max.z;
+
+	}
 };

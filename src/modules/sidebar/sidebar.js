@@ -6,6 +6,8 @@ import {createPanel as createAppearancePanel} from "./panel_appearance.js";
 import {createPanel as createInfosPanel} from "./panel_infos.js";
 import {createPanel as createHoveredPanel} from "./panel_hovered.js";
 import {createPanel as createScenePanel} from "./panel_scene.js";
+import { Measure, sliceString, octreesString, ellipseString, integrateString } from "../../interaction/measure.js";
+import { GaussianSplats, PointCloudOctree, Vector3, Box3 } from "../../Potree.js";
 
 let sidebar = null;
 let dir = new URL(import.meta.url + "/../").href;
@@ -146,12 +148,32 @@ function createMeasureSection(){
 	let panel_measurements = createMeasurementsPanel();
 	elPanel.append(panel_measurements.element);
 
+	addClickListener(elPanel);
+
 	let section = new Section();
 	section.icon = `url(${dir}/icons/measure.svg)`;
 	section.panel = elPanel;
 	section.handler = panel_measurements;
 
 	return section;
+}
+
+function addClickListener(elPanel){
+	elPanel.addEventListener("click", (e) => {
+		if(e.target && e.target.id === "innerCalc"){
+			console.log("innerCalc clicked");
+
+			let elBlock = e.target.closest("div");
+			let elDropdown = elBlock.getElementsByTagName("select")
+			let id = elBlock.dataset.measureid
+
+			calculateInnerVolume(id, elDropdown)
+		}
+		if (e.target && e.target.id === "innerOption") {
+			console.log("Dropdown changed");
+		}
+	}
+	);
 }
 
 
@@ -189,25 +211,107 @@ export async function installSidebar(elPotree, potree){
 	let elSectionSelection = elSidebar.querySelector("#potree_sidebar_section_selection");
 	let elSectionContent = elSidebar.querySelector("#potree_sidebar_content");
 
-	sidebar = {
-		elContainer: elPotree,
-		potree, sections,
-		elSidebar, elSectionSelection, elSectionContent,
-		toggle,
-	};
-
-
 	let secMain = createMainSection(potree);
 	let secMeasure = createMeasureSection();
 	let secAttributes = createAttributesSection();
+
+	sidebar = {
+		elContainer: elPotree,
+		potree, sections, secMeasure,
+		elSidebar, elSectionSelection, elSectionContent,
+		toggle, open, setActiveSection
+	};
 
 	addSection(secMain);
 	addSection(secAttributes);
 	addSection(secMeasure);
 
 	setActiveSection(secAttributes);
-
+	potree.sidebar = sidebar;
 	return sidebar;
 }
 
 
+function calculateInnerVolume(id, elDropdown)
+{
+	let measures = potree.measure.measures
+	let measure = measures[Number(id)-1]
+	//absolut keine ahnung warum ich ne collection kriege,
+	//aber das is n array :roll_eyes:
+	let option = elDropdown[0].value
+	console.log(option)
+
+	let newBounds = calcBounds(measure)
+	let pointClouds = potree.scene.root.children.filter((entry) => entry instanceof PointCloudOctree)
+	let splats = potree.scene.root.children.filter((entry) => entry instanceof GaussianSplats)
+
+
+	if (option === sliceString){
+		console.log(sliceString)
+		alphaSlicing(newBounds, pointClouds)
+	}
+	if (option === octreesString){
+		console.log(octreesString)
+		octreeVolume(newBounds, pointClouds)
+	}
+	if (option === ellipseString){
+		console.log(ellipseString)
+		ellipseVolume(newBounds, splats)
+	}
+	if (option === integrateString){
+		console.log(integrateString)
+		integrationVolume(newBounds, splats)
+	}
+}
+
+function alphaSlicing(newBounds, pointClouds){
+
+}
+function octreeVolume(newBounds, pointClouds){
+	//results = {}
+	pointClouds.forEach(element => {
+		if(element.root) {
+			recDrawingBBTest(newBounds, element.root)
+			recSumOfVolume(newBounds, element.root)
+		}
+	});
+}
+function ellipseVolume(newBounds, splats){
+	
+}
+function integrationVolume(newBounds, splats){
+	
+}
+
+function calcBounds(measure) {
+	//ok, da ich nachgeguckt habe: von der pos der measure aus
+	//gehen die hälften der scale-werte als kantenlängen in die entsprechenden richtungen
+	//sprich scale (1,2,3) und pos (0,0,0): von 0,0,0 gehen die kanten + und - .5 in x
+	//+ und - 1 in y und + und - 1.5 in z
+
+	let distance = measure.size.clone().divideScalar(2)
+
+	let min = measure.markers[0].clone().sub( distance )
+	let max = measure.markers[0].clone().add( distance )
+
+	return new Box3(min, max)
+	
+}
+
+function recSumOfVolume (newBounds, octreeNode) {
+	octreeNode.children.forEach(element => {
+		if (element && element.boundingBox.intersectsBox(newBounds)){
+		}
+	});
+}
+
+//FIXME TEST 
+function recDrawingBBTest (newBounds, octreeNode) {
+	octreeNode.children.forEach(element => {
+		if (element && element.boundingBox.intersectsBox(newBounds)){
+			let bb = element.boundingBox
+			potree.renderer.drawLine(bb.min, bb.max, new Vector3(255, 255, 0))
+			recDrawingBBTest(newBounds, element)
+		}
+	});
+}

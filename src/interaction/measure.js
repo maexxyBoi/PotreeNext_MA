@@ -1,8 +1,13 @@
 
-import {Potree, Mesh, Vector3, Vector4, geometries, SceneNode} from "potree";
+import {Potree, Mesh, Box3, Vector3, Vector4, geometries, SceneNode} from "potree";
 import {EventDispatcher, KeyCodes, MouseCodes} from "potree";
 
 let counter = 0;
+export const sliceString = "Alpha Shapes Slicing";
+export const octreesString = "Octrees";
+export const ellipseString = "Error Ellipse";
+export const integrateString = "Integration";
+
 
 export class Measure{
 
@@ -43,7 +48,6 @@ export class Measure{
 			${htmlMarkers}
 		</table>
 		`;
-		
 		return html;
 	}
 
@@ -93,13 +97,41 @@ export class InnerVolMeasure extends Measure{
 
 	constructor(){
 		super();
-		this.requiredMarkers = 3;
-		this.maxMarkers = 100;
+		this.requiredMarkers = 0;
+		this.maxMarkers = 1;
+		this.innerVolume;
+		this.size = new Vector3(1000,100,500)
 	}
 
 	addMarker(position){
 		this.markers.push(position.clone());
 
+	}
+	toHtml(prefix = ""){
+		let html = super.toHtml(prefix)
+
+		if(!this.innerVolume) {
+			html +=
+			`<div class="innerMeasureBlock" data-measureid="${counter}">
+				<select id="innerOption">
+					<option value="Alpha Shapes Slicing">Pointcloud: ${sliceString}</option>
+					<option value="Octrees">Pointcloud: ${octreesString}</option>
+					<option value="Error Ellipse">Gaussians: ${ellipseString}</option>
+					<option value="Integration">Gaussians: ${integrateString}</option>
+				</select>
+				<br></br>
+				<button id="innerCalc">Calculate Volume</button>
+			</div>
+			` 
+		}
+		else {
+			html += `
+			<br></br>
+			<div>${this.innerVolume}</div>
+			`		
+		}
+
+		return html
 	}
 
 };
@@ -149,50 +181,55 @@ export class MeasureTool{
 
 		for(let measure of this.measures){
 
-			// DRAW MARKERS
-			for(let markerIndex = 0; markerIndex < measure.markers.length; markerIndex++){
-				let marker = measure.markers[markerIndex];
-
-				let depth = camera.getWorldPosition().distanceTo(marker);
-				let radius = depth / 50;
-
-				let args = {
-					color: new Vector4(0, 1, 0, 1)
-				};
-				if(measure.markers_highlighted[markerIndex]){
-					args.color.set(255, 127, 80, 255).multiplyScalar(1 / 255);
-				}
-				this.renderer.drawSphere(marker, radius, args);
+			if(measure instanceof InnerVolMeasure) {
+				this.drawInner(measure);
 			}
 
-			// DRAW EDGES
-			if(measure.showEdges){
-				for(let i = 0; i < measure.markers.length - 1; i++){
-					this.renderer.drawLine(
-						measure.markers[i + 0],
-						measure.markers[i + 1],
-						new Vector3(255, 0, 0),
-					);
-				}
-			}
+			else {
+				// DRAW MARKERS
+				for(let markerIndex = 0; markerIndex < measure.markers.length; markerIndex++){
+					let marker = measure.markers[markerIndex];
 
-			// DRAW HEIGHT MEASURE
-			if(measure instanceof HeightMeasure && measure.markers.length === 2){
+					let depth = camera.getWorldPosition().distanceTo(marker);
+					let radius = depth / 50;
 
-				let low  = measure.markers[0];
-				let high = measure.markers[1];
-				if(low.z > high.z){
-					[low, high] = [high, low];
+					let args = {
+						color: new Vector4(0, 1, 0, 1)
+					};
+					if(measure.markers_highlighted[markerIndex]){
+						args.color.set(255, 127, 80, 255).multiplyScalar(1 / 255);
+					}
+					this.renderer.drawSphere(marker, radius, args);
 				}
 
-				let start = new Vector3(high.x, high.y, high.z);
-				let end = new Vector3(high.x, high.y, low.z);
+				// DRAW EDGES
+				if(measure.showEdges){
+					for(let i = 0; i < measure.markers.length - 1; i++){
+						this.renderer.drawLine(
+							measure.markers[i + 0],
+							measure.markers[i + 1],
+							new Vector3(255, 0, 0),
+						);
+					}
+				}
 
-				this.renderer.drawLine(start, end, new Vector3(0, 0, 255));
+				// DRAW HEIGHT MEASURE
+				if(measure instanceof HeightMeasure && measure.markers.length === 2){
 
-				this.renderer.drawLine(low, end, new Vector3(255, 0, 0));
+					let low  = measure.markers[0];
+					let high = measure.markers[1];
+					if(low.z > high.z){
+						[low, high] = [high, low];
+					}
+
+					let start = new Vector3(high.x, high.y, high.z);
+					let end = new Vector3(high.x, high.y, low.z);
+
+					this.renderer.drawLine(start, end, new Vector3(0, 0, 255));
+
+					this.renderer.drawLine(low, end, new Vector3(255, 0, 0));
+				}
 			}
-
 		}
 	}
 
@@ -206,7 +243,6 @@ export class MeasureTool{
 			if(result.depth !== Infinity){
 				node.position.copy(result.position);
 				node.visible = true;
-
 				Potree.pickPos = result.position;
 			}
 		});
@@ -244,6 +280,9 @@ export class MeasureTool{
 				}else if(measure.markers.length === measure.requiredMarkers){
 					this.stopMeasuring();
 				}
+				this.potree.sidebar.setActiveSection(this.potree.sidebar.secMeasure)
+
+				this.potree.sidebar.open()
 
 			}else if(e.event.button === MouseCodes.RIGHT){
 
@@ -264,4 +303,30 @@ export class MeasureTool{
 		this.currentMeasurement = null;
 	}
 
+	drawInner(measure){
+
+		if (measure.markers.length != 0) {
+			let pos = measure.markers[0]
+			let col = new Vector3(0, 255, 0, 100)
+			this.drawBBTest()
+			this.renderer.drawBox(pos, measure.size, col)
+		}
+	}
+	drawBBTest(){
+
+		let bb = new Box3(
+			new Vector3(-549.203, -465.319, -65.84),
+			new Vector3(532.98, 291.885, 104.673)
+			)
+		let bb2 = new Box3(
+			new Vector3(0, 0, 0),
+			new Vector3(1082.183, 1082.183, 1082.183)
+			)
+		let position = bb.min.clone();
+		position.add(bb.max).multiplyScalar(0.5);
+		let size = bb.size();
+		let color = new Vector3(255, 255, 0);
+		//this.renderer.drawBox(position, size, color);
+		//this.renderer.drawLine(bb2.min, bb2.max, color)
+	}
 };

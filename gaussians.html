@@ -94,7 +94,7 @@
 
 
 	let measure = new PointMeasure();
-	measure.markers.push(new Vector3(50, -250, 12));
+	measure.markers.push(new Vector3(0,0,0));
 	potree.measure.measures.push(measure);
 
 	Potree.events.onFrameStart(() => {
@@ -106,17 +106,19 @@
 
 
 	// let splats2 = await GSLoader.load("./resources/models/gardentable.ply");
-	//let splats2 = await GSLoader.load("./resources/banana.ply");
+	let splats2 = await GSLoader.load("./resources/banana.ply");
 	// let splats2 = await GSLoader.load("./resources/models/garden.ply");
-	//scene.root.children.push(splats2);
+	scene.root.children.push(splats2);
 
 	Potree3Loader.load("./resources/eclepens.potree").then(pointcloud => {
 		//Ah ja das is natürlich gut zu wissen dass quasi alle probleme daher rühren,
 		// dass die scale angepasst wurde
 		//Warum auch immer das zu Fehlern führt. Bruuuh
+		//Naja intern scheints ja richtig abgebildet zu sein
 
-		pointcloud.scale.set(0.005, 0.005, 0.005);
-		pointcloud.position.set(-2, -2, 1);
+
+		//pointcloud.scale.set(0.005, 0.005, 0.005);
+		pointcloud.position.set(0,0,0);
 		pointcloud.name = "Eclepens";
 
 		scene.root.children.push(pointcloud);

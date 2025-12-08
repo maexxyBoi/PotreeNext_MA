@@ -116,7 +116,21 @@ function createPipeline(renderer){
 			module,
 			entryPoint: "main_fragment",
 			targets: [
-				{format: "bgra8unorm"},
+				  {
+					format: "bgra8unorm",
+					blend: {
+					color: {
+						srcFactor: "src-alpha",
+						dstFactor: "one-minus-src-alpha",
+						operation: "add"
+					},
+					alpha: {
+						srcFactor: "one",
+						dstFactor: "one-minus-src-alpha",
+						operation: "add"
+					}
+					}
+				},
 				{format: "r32uint"},
 			],
 		},
@@ -239,7 +253,7 @@ export function render(boxes, drawstate){
 			color[4 * i + 0] = box[2].x;
 			color[4 * i + 1] = box[2].y;
 			color[4 * i + 2] = box[2].z;
-			color[4 * i + 3] = 255;
+			color[4 * i + 3] = 100;
 		}
 
 		let numBoxes = boxes.length;

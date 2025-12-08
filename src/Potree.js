@@ -79,6 +79,7 @@ async function load(url, args = {}){
 
 const pickPosition = new Vector3();
 const pickQueue = [];
+const sidebar = null;
 
 function pick(x, y, callback){
 	pickQueue.push({x, y, callback});
@@ -170,7 +171,7 @@ export let Potree = {
 	pick, pickQueue, pickPosition,
 	init,
 	settings, state,
-	events,
+	events, sidebar,
 	scene: null,
 	instance: null,
 	version: "2.0 (WebGPU prototype)",

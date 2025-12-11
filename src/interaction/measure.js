@@ -11,6 +11,8 @@ export const integrateString = "Integration";
 
 export class Measure{
 
+	static id = 0;
+
 	constructor(){
 		this.label = `Measure ${counter}`;
 		this.markers = [];
@@ -19,6 +21,7 @@ export class Measure{
 		this.maxMarkers = 1;
 		this.showEdges = true;
 		// this.showEdgesClosed = false;
+		this.measureID = InnerVolMeasure.id++;
 
 		counter++;
 	}
@@ -101,6 +104,10 @@ export class InnerVolMeasure extends Measure{
 		this.maxMarkers = 1;
 		this.innerVolume;
 		this.size = new Vector3(1000,100,500)
+		//we only really need this when we measure pointclouds, but i want it here, not where computation happens
+		this.octree = null
+		//testing purposes
+		this.measureOctBoxes = []
 	}
 
 	addMarker(position){
@@ -109,10 +116,10 @@ export class InnerVolMeasure extends Measure{
 	}
 	toHtml(prefix = ""){
 		let html = super.toHtml(prefix)
-
+		let id = this.measureID
 		if(!this.innerVolume) {
 			html +=
-			`<div class="innerMeasureBlock" data-measureid="${counter}">
+			`<div class="innerMeasureBlock" data-measureid="${id}">
 				<select id="innerOption">
 					<option value="Alpha Shapes Slicing">Pointcloud: ${sliceString}</option>
 					<option value="Octrees">Pointcloud: ${octreesString}</option>
@@ -183,6 +190,8 @@ export class MeasureTool{
 
 			if(measure instanceof InnerVolMeasure) {
 				this.drawInner(measure);
+				//testing purposes only 
+				this.drawCalcBoxes(measure)
 			}
 
 			else {
@@ -329,4 +338,12 @@ export class MeasureTool{
 		//this.renderer.drawBox(position, size, color);
 		//this.renderer.drawLine(bb2.min, bb2.max, color)
 	}
+
+	drawCalcBoxes(measure){
+		for (let i = 0; i < measure.measureOctBoxes.length; i+=2 )
+		{
+			this.renderer.drawBox(measure.measureOctBoxes[i], measure.measureOctBoxes[i+1], new Vector3(255,0,0))
+		}
+	}
+
 };

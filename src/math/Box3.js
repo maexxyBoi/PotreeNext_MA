@@ -115,4 +115,16 @@ export class Box3{
 			box.max.z >= this.min.z && box.min.z <= this.max.z;
 
 	}
-};
+	isEmpty() {
+
+		// this is a more robust check for empty than ( volume <= 0 ) because volume can get positive with two negative axes
+
+		return ( this.max.x < this.min.x ) || ( this.max.y < this.min.y ) || ( this.max.z < this.min.z );
+
+	}
+	getSize( target ) {
+
+		return this.isEmpty() ? target.set( 0, 0, 0 ) : target.subVectors( this.max, this.min );
+
+	}};
+	

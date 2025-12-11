@@ -235,7 +235,7 @@ export async function installSidebar(elPotree, potree){
 function calculateInnerVolume(id, elDropdown)
 {
 	let measures = potree.measure.measures
-	let measure = measures[Number(id)-1]
+	let measure = measures[Number(id)]
 	//absolut keine ahnung warum ich ne collection kriege,
 	//aber das is n array :roll_eyes:
 	let option = elDropdown[0].value
@@ -252,7 +252,9 @@ function calculateInnerVolume(id, elDropdown)
 	}
 	if (option === octreesString){
 		console.log(octreesString)
-		octreeVolume(newBounds, pointClouds)
+		//test measure only for vis. purposes
+		measure.measureOctBoxes = []
+		octreeVolume(newBounds, pointClouds, measure)
 	}
 	if (option === ellipseString){
 		console.log(ellipseString)
@@ -267,14 +269,16 @@ function calculateInnerVolume(id, elDropdown)
 function alphaSlicing(newBounds, pointClouds){
 
 }
-function octreeVolume(newBounds, pointClouds){
-	//results = {}
+function octreeVolume(newBounds, pointClouds, measure){
+	let results = {}
 	pointClouds.forEach(element => {
 		if(element.root) {
-			recDrawingBBTest(newBounds, element.root)
-			recSumOfVolume(newBounds, element.root)
+			results[element.name] = 0
+			//recDrawingBBTest(newBounds, element.root)
+			recSumOfVolume(newBounds, element.root, results, measure)
 		}
 	});
+	console.log(results)
 }
 function ellipseVolume(newBounds, splats){
 	
@@ -298,11 +302,35 @@ function calcBounds(measure) {
 	
 }
 
-function recSumOfVolume (newBounds, octreeNode) {
-	octreeNode.children.forEach(element => {
-		if (element && element.boundingBox.intersectsBox(newBounds)){
-		}
-	});
+function recSumOfVolume (newBounds, octreeNode, results, measure) {
+	let empty = octreeNode.children.every(element => 
+		element == null
+	);
+
+
+	//FIXME WRONG BOUNDS!!!!!!!
+	//empty nodes can obvsly be just empty as well
+	//but if theyre inside the pc, they are leaves
+	if(empty && octreeNode.boundingBox.intersectsBox(newBounds))
+	{
+		let dims = new Vector3(0,0,0)
+		dims = octreeNode.boundingBox.getSize(dims) //idk
+		let vol = Math.abs(dims.x) * Math.abs(dims.y) * Math.abs(dims.z)
+		//test
+		//potree.renderer.drawBox(octreeNode.boundingBox.min, dims.divideScalar(2), new Vector3(255,0,0))
+		measure.measureOctBoxes.push(octreeNode.boundingBox.min)
+		measure.measureOctBoxes.push(dims)
+		//test end
+		results[octreeNode.octree.name] += vol
+		//console.log(octreeNode.numElements)
+	}
+	else {
+		octreeNode.children.forEach(element => {
+			if (element && element.boundingBox.intersectsBox(newBounds)){
+				recSumOfVolume(newBounds, element, results, measure)
+			}
+		});
+	}
 }
 
 //FIXME TEST 

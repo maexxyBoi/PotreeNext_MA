@@ -1,8 +1,12 @@
-import { Box3 } from "../../Potree";
+import { Box3, Vector3 } from "potree"
 
+
+//FIXME
+//idk really know if i need traversing or id in any way, but leave it here for now
 export class simpleOctree {
 	constructor(){
-		this.root = new simpleOctreeNode();
+		this.root = new simpleOctreeNode(0, this);
+		this.maxDepth = 6
 	}
 
 	setBounds(newBounds)
@@ -13,31 +17,58 @@ export class simpleOctree {
 
 export class simpleOctreeNode {
 
-	constructor(){
+	constructor(depth, tree){
 		this.id = "0" 
 		this.children = []
 		this.boundingBox = new Box3();
+		this.currentDepth = depth
+		this.tree = tree
 	}
 
 	isEmpty() {
 		return this.children.length == 0; 
 	}
 
+	setBounds(newBounds)
+	{
+		this.boundingBox = newBounds
+		return this;
+	}
+
 	split(){
-		if(this.boundingBox.min)
+		if(this.boundingBox.min && (this.currentDepth < this.tree.maxDepth))
 		{
+			this.currentDepth++
 			let min = this.boundingBox.min
 			let max = this.boundingBox.max
-			//i guess every box needs their own reference, hence cloning.
-			//else one change destroys all the other too
-			bb1 = new Box3(min.clone(), max.clone().divideScalar(2))
-			bb2 = new Box3(min.clone().setX(max.x/2), max.clone().divideScalar(2).setX(max.x))
-			bb3 = new Box3(min.clone().setY(max.y/2), max.clone().divideScalar(2).setY(max.y))
-			bb4 = new Box3(max.clone().divideScalar(2).setZ(min.z), max.clone().setZ(max.z/2))
-			bb5 = new Box3(min.clone().setZ(max.z/2), max.clone().divideScalar(2).setZ(max.z))
-			bb6 = new Box3(min.clone().divideScalar(2).setX(min.x), max.clone().setX(max.x/2))
-			bb7 = new Box3(min.clone().divideScalar(2).setY(min.y), max.clone().setY(max.y/2))
-			bb8 = new Box3(max.clone().divideScalar(2), max.clone())
+			let mid = min.clone().add(max).divideScalar(2)
+			let children = [
+				new simpleOctreeNode(this.currentDepth, this.tree).
+					setBounds(new Box3(new Vector3(min.x, min.y, min.z),
+						new Vector3(mid.x, mid.y, mid.z))),
+				new simpleOctreeNode(this.currentDepth, this.tree).
+					setBounds(new Box3(new Vector3(mid.x, min.y, min.z),
+						new Vector3(max.x, mid.y, mid.z))),
+				new simpleOctreeNode(this.currentDepth, this.tree).
+					setBounds(new Box3(new Vector3(min.x, mid.y, min.z),
+						new Vector3(mid.x, max.y, mid.z))),
+				new simpleOctreeNode(this.currentDepth, this.tree).
+					setBounds(new Box3(new Vector3(mid.x, mid.y, min.z),
+						new Vector3(max.x, max.y, mid.z))),
+				new simpleOctreeNode(this.currentDepth, this.tree).
+					setBounds(new Box3(new Vector3(min.x, min.y, mid.z),
+						new Vector3(mid.x, mid.y, max.z))),
+				new simpleOctreeNode(this.currentDepth, this.tree).
+					setBounds(new Box3(new Vector3(mid.x, min.y, mid.z),
+						new Vector3(max.x, mid.y, max.z))),
+				new simpleOctreeNode(this.currentDepth, this.tree).
+					setBounds(new Box3(new Vector3(min.x, mid.y, mid.z),
+						new Vector3(mid.x, max.y, max.z))),
+				new simpleOctreeNode(this.currentDepth, this.tree).
+					setBounds(new Box3(new Vector3(mid.x, mid.y, mid.z),
+						new Vector3(max.x, max.y, max.z))),
+			]
+			this.children = children
 		}
 	}
 }

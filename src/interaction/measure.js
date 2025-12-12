@@ -108,6 +108,8 @@ export class InnerVolMeasure extends Measure{
 		this.octree = null
 		//testing purposes
 		this.measureOctBoxes = []
+		this.measureOctTightBoxes = []
+		this.newOctNodeBBs = []
 	}
 
 	addMarker(position){
@@ -189,7 +191,7 @@ export class MeasureTool{
 		for(let measure of this.measures){
 
 			if(measure instanceof InnerVolMeasure) {
-				this.drawInner(measure);
+				//this.drawInner(measure);
 				//testing purposes only 
 				this.drawCalcBoxes(measure)
 			}
@@ -343,6 +345,14 @@ export class MeasureTool{
 		for (let i = 0; i < measure.measureOctBoxes.length; i+=2 )
 		{
 			this.renderer.drawBox(measure.measureOctBoxes[i], measure.measureOctBoxes[i+1], new Vector3(255,0,0))
+		}/*
+		for (let i = 0; i < measure.measureOctTightBoxes.length; i+=2 )
+		{
+			this.renderer.drawBox(measure.measureOctTightBoxes[i], measure.measureOctTightBoxes[i+1], new Vector3(0,0,255))
+		}*/
+		for (let i = 0; i < measure.newOctNodeBBs.length; i+=2 )
+		{
+			this.renderer.drawBox(measure.newOctNodeBBs[i], measure.newOctNodeBBs[i+1], new Vector3(0,0,255))
 		}
 	}
 

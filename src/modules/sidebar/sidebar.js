@@ -8,6 +8,7 @@ import {createPanel as createHoveredPanel} from "./panel_hovered.js";
 import {createPanel as createScenePanel} from "./panel_scene.js";
 import { Measure, sliceString, octreesString, ellipseString, integrateString } from "../../interaction/measure.js";
 import { GaussianSplats, PointCloudOctree, Vector3, Box3 } from "../../Potree.js";
+import { simpleOctree, simpleOctreeNode } from "../../potree/octree/simpleOctree.js";
 
 let sidebar = null;
 let dir = new URL(import.meta.url + "/../").href;
@@ -271,11 +272,16 @@ function alphaSlicing(newBounds, pointClouds){
 }
 function octreeVolume(newBounds, pointClouds, measure){
 	let results = {}
+	let originalLeaves = []
+	let secondTree = new simpleOctree();
+	secondTree.setBounds(newBounds);
 	pointClouds.forEach(element => {
 		if(element.root) {
 			results[element.name] = 0
 			//recDrawingBBTest(newBounds, element.root)
-			recSumOfVolume(newBounds, element.root, results, measure)
+			//for testing
+			recGetLeavesForVol(newBounds, element.root, measure, originalLeaves)
+			recCalcVol(secondTree.root, originalLeaves, measure, results)
 		}
 	});
 	console.log(results)
@@ -302,34 +308,68 @@ function calcBounds(measure) {
 	
 }
 
-function recSumOfVolume (newBounds, octreeNode, results, measure) {
+function recGetLeavesForVol (newBounds, octreeNode, measure, originalLeaves) {
 	let empty = octreeNode.children.every(element => 
 		element == null
 	);
 
-
-	//FIXME WRONG BOUNDS!!!!!!!
 	//empty nodes can obvsly be just empty as well
 	//but if theyre inside the pc, they are leaves
 	if(empty && octreeNode.boundingBox.intersectsBox(newBounds))
 	{
 		let dims = new Vector3(0,0,0)
 		dims = octreeNode.boundingBox.getSize(dims) //idk
-		let vol = Math.abs(dims.x) * Math.abs(dims.y) * Math.abs(dims.z)
+		//let vol = Math.abs(dims.x) * Math.abs(dims.y) * Math.abs(dims.z)
 		//test
 		//potree.renderer.drawBox(octreeNode.boundingBox.min, dims.divideScalar(2), new Vector3(255,0,0))
-		measure.measureOctBoxes.push(octreeNode.boundingBox.min)
+		measure.measureOctBoxes.push(octreeNode.boundingBox.min.add(octreeNode.boundingBox.max).divideScalar(2))
 		measure.measureOctBoxes.push(dims)
 		//test end
-		results[octreeNode.octree.name] += vol
+		originalLeaves.push(octreeNode)
+		//results[octreeNode.octree.name] += vol
 		//console.log(octreeNode.numElements)
 	}
 	else {
 		octreeNode.children.forEach(element => {
 			if (element && element.boundingBox.intersectsBox(newBounds)){
-				recSumOfVolume(newBounds, element, results, measure)
+				recGetLeavesForVol(newBounds, element, measure, originalLeaves)
 			}
 		});
+	}
+}
+
+function recCalcVol (node, originalLeaves, measure, results)
+{
+
+	//for testing ONCE MORE
+	//measure.newOctNodeBBs.push(node.boundingBox.min)
+	//measure.newOctNodeBBs.push(node.boundingBox.max)
+
+	let containsContent = originalLeaves.some( leaf => {
+		return node.boundingBox.intersectsBox(leaf.boundingBox)
+		||
+		node.boundingBox.containsBox(leaf.boundingBox)
+	})
+	if(containsContent) {
+		if(node.tree.maxDepth > node.currentDepth)
+		{
+			node.split()
+			console.log("recCalcVol");
+			console.log(node.currentDepth)
+			node.children.forEach(child => {
+				recCalcVol(child, originalLeaves, measure, results)
+			});
+		}
+		else {
+
+	 		let dims = new Vector3(0,0,0)
+			dims = node.boundingBox.getSize(dims) //idk, again :D
+			let vol = Math.abs(dims.x) * Math.abs(dims.y) * Math.abs(dims.z)
+			results[originalLeaves[0].octree.name] += vol
+	//for testing ONCE MORE
+			measure.newOctNodeBBs.push(node.boundingBox.min.add(node.boundingBox.max).divideScalar(2))
+			measure.newOctNodeBBs.push(dims)
+		}
 	}
 }
 

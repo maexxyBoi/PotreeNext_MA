@@ -278,9 +278,10 @@ function octreeVolume(newBounds, pointClouds, measure){
 	pointClouds.forEach(element => {
 		if(element.root) {
 			results[element.name] = 0
+			results[element.name+"orig"] = 0
 			//recDrawingBBTest(newBounds, element.root)
 			//for testing
-			recGetLeavesForVol(newBounds, element.root, measure, originalLeaves)
+			recGetLeavesForVol(newBounds, element.root, measure, originalLeaves, results)
 			recCalcVol(secondTree.root, originalLeaves, measure, results)
 		}
 	});
@@ -308,7 +309,7 @@ function calcBounds(measure) {
 	
 }
 
-function recGetLeavesForVol (newBounds, octreeNode, measure, originalLeaves) {
+function recGetLeavesForVol (newBounds, octreeNode, measure, originalLeaves, results) {
 	let empty = octreeNode.children.every(element => 
 		element == null
 	);
@@ -319,20 +320,20 @@ function recGetLeavesForVol (newBounds, octreeNode, measure, originalLeaves) {
 	{
 		let dims = new Vector3(0,0,0)
 		dims = octreeNode.boundingBox.getSize(dims) //idk
-		//let vol = Math.abs(dims.x) * Math.abs(dims.y) * Math.abs(dims.z)
+		let vol = Math.abs(dims.x) * Math.abs(dims.y) * Math.abs(dims.z)
 		//test
 		//potree.renderer.drawBox(octreeNode.boundingBox.min, dims.divideScalar(2), new Vector3(255,0,0))
 		measure.measureOctBoxes.push(octreeNode.boundingBox.min.add(octreeNode.boundingBox.max).divideScalar(2))
 		measure.measureOctBoxes.push(dims)
 		//test end
 		originalLeaves.push(octreeNode)
-		//results[octreeNode.octree.name] += vol
+		results[octreeNode.octree.name+"orig"] += vol
 		//console.log(octreeNode.numElements)
 	}
 	else {
 		octreeNode.children.forEach(element => {
 			if (element && element.boundingBox.intersectsBox(newBounds)){
-				recGetLeavesForVol(newBounds, element, measure, originalLeaves)
+				recGetLeavesForVol(newBounds, element, measure, originalLeaves, results)
 			}
 		});
 	}
@@ -354,8 +355,8 @@ function recCalcVol (node, originalLeaves, measure, results)
 		if(node.tree.maxDepth > node.currentDepth)
 		{
 			node.split()
-			console.log("recCalcVol");
-			console.log(node.currentDepth)
+			//console.log("recCalcVol");
+			//console.log(node.currentDepth)
 			node.children.forEach(child => {
 				recCalcVol(child, originalLeaves, measure, results)
 			});

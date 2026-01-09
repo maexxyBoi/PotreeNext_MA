@@ -191,7 +191,7 @@ export class MeasureTool{
 		for(let measure of this.measures){
 
 			if(measure instanceof InnerVolMeasure) {
-				//this.drawInner(measure);
+				this.drawInner(measure);
 				//testing purposes only 
 				this.drawCalcBoxes(measure)
 			}

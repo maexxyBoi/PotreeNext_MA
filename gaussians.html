@@ -95,7 +95,7 @@
 
 	let measure = new PointMeasure();
 	measure.markers.push(new Vector3(0,0,0));
-	potree.measure.measures.push(measure);
+	//potree.measure.measures.push(measure);
 
 	Potree.events.onFrameStart(() => {
 		let report = Potree.renderer.createResourceReport();
@@ -106,7 +106,7 @@
 
 
 	// let splats2 = await GSLoader.load("./resources/models/gardentable.ply");
-	let splats2 = await GSLoader.load("./resources/banana.ply");
+	let splats2 = await GSLoader.load("./resources/gardentable.ply");
 	// let splats2 = await GSLoader.load("./resources/models/garden.ply");
 	scene.root.children.push(splats2);
 

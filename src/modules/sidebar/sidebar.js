@@ -249,7 +249,7 @@ function calculateInnerVolume(id, elDropdown)
 
 	if (option === sliceString){
 		console.log(sliceString)
-		alphaSlicing(newBounds, pointClouds)
+		concaveSlicing(newBounds, pointClouds)
 	}
 	if (option === octreesString){
 		console.log(octreesString)
@@ -267,8 +267,71 @@ function calculateInnerVolume(id, elDropdown)
 	}
 }
 
-function alphaSlicing(newBounds, pointClouds){
+function concaveSlicing(newBounds, pointClouds){
+	let result = {
+		minZPoint: null,
+		maxZPoint: null,
+		minZ: Infinity,
+		maxZ: -Infinity
+	};
 
+	pointClouds.forEach(octree => {
+		if (octree.root) {
+			traverseOctreeForPoints(octree.root, newBounds, (node) => {
+				if (node.loaded && node.geometry) {
+					scanNodeForMinMaxZ(node, newBounds, result);
+				} else {
+					// Load the node if not loaded
+					octree.load(node);
+				}
+			});
+		}
+	});
+
+	console.log("Min Z Point:", result.minZPoint);
+	console.log("Max Z Point:", result.maxZPoint);
+}
+
+function traverseOctreeForPoints(node, bounds, callback) {
+	if (!node.boundingBox.intersectsBox(bounds)) {
+		return;
+	}
+
+	let isLeaf = node.children.every(child => child === null);
+	if (isLeaf) {
+		callback(node);
+	} else {
+		node.children.forEach(child => {
+			if (child) {
+				traverseOctreeForPoints(child, bounds, callback);
+			}
+		});
+	}
+}
+
+function scanNodeForMinMaxZ(node, bounds, result) {
+	let geometry = node.geometry;
+	let view = new DataView(geometry.buffer);
+	let numPoints = geometry.numElements;
+	let octreePos = node.octree.position;
+
+	for (let i = 0; i < numPoints; i++) {
+		let x = view.getFloat32(12 * i + 0, true) + octreePos.x;
+		let y = view.getFloat32(12 * i + 4, true) + octreePos.y;
+		let z = view.getFloat32(12 * i + 8, true) + octreePos.z;
+
+		let pointPos = new Vector3(x, y, z);
+		if (bounds.containsPoint(pointPos)) {
+			if (z < result.minZ) {
+				result.minZ = z;
+				result.minZPoint = { position: pointPos };
+			}
+			if (z > result.maxZ) {
+				result.maxZ = z;
+				result.maxZPoint = { position: pointPos };
+			}
+		}
+	}
 }
 function octreeVolume(newBounds, pointClouds, measure){
 	let results = {}

@@ -3,7 +3,7 @@ import {Potree, Mesh, Box3, Vector3, Vector4, geometries, SceneNode} from "potre
 import {EventDispatcher, KeyCodes, MouseCodes} from "potree";
 
 let counter = 0;
-export const sliceString = "Alpha Shapes Slicing";
+export const sliceString = "Concave Hull Slicing";
 export const octreesString = "Octrees";
 export const ellipseString = "Error Ellipse";
 export const integrateString = "Integration";
@@ -123,7 +123,7 @@ export class InnerVolMeasure extends Measure{
 			html +=
 			`<div class="innerMeasureBlock" data-measureid="${id}">
 				<select id="innerOption">
-					<option value="Alpha Shapes Slicing">Pointcloud: ${sliceString}</option>
+					<option value="Concave Hull Slicing">Pointcloud: ${sliceString}</option>
 					<option value="Octrees">Pointcloud: ${octreesString}</option>
 					<option value="Error Ellipse">Gaussians: ${ellipseString}</option>
 					<option value="Integration">Gaussians: ${integrateString}</option>

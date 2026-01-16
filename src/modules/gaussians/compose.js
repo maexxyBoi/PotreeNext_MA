@@ -30,7 +30,7 @@ let shaderCode = `
 		// Convert pixel coordinates to normalized UV coordinates [0, 1]
 		var uv = pos.xy / vec2f(uniforms.screenWidth, uniforms.screenHeight);
 		// Flip Y for proper texture orientation
-		uv.y = 1.0 - uv.y;
+		//uv.y = 1.0 - uv.y;
 
 		var sourceColor = textureSample(myTexture, mySampler, uv);
 

@@ -18,10 +18,6 @@ let pipeline_depth = null;
 
 // Toggle heavy GPU readbacks/logs; keep this false for performance
 const DEBUG_READBACK = false;
-// Safe mode: skip compute/sort and draw only a minimal triangle
-const SAFE_MODE = false;
-// Progressive mode: gradually increase visible splat count per frame
-const PROGRESSIVE_MODE = !SAFE_MODE;
 const PROGRESSIVE_BUDGET_INIT = 10000;     // start with 10k splats
 const PROGRESSIVE_BUDGET_INCREASE = 5000;  // add 5k each frame up to max
 const PROGRESSIVE_BUDGET_MAX = 500000;     // cap at 500k (show all splats)
@@ -427,10 +423,7 @@ export class GaussianSplats extends SceneNode{
 			this.numSplatsUploaded += numNew;
 			// New data uploaded; force a sort next frame
 			_sortedOnce = false;
-			// In progressive mode, reset budget to ramp up gradually
-			if (PROGRESSIVE_MODE) {
-				_progressiveSplatBudget = PROGRESSIVE_BUDGET_INIT;
-			}
+			_progressiveSplatBudget = PROGRESSIVE_BUDGET_INIT;
 			console.log("Upload completed, numSplatsUploaded:", this.numSplatsUploaded);
 		}
 
@@ -463,7 +456,7 @@ export class GaussianSplats extends SceneNode{
 		}
 
 		// CPU-init identity ordering on first frame (avoid GPU compute for now)
-		if (!_sortedOnce && PROGRESSIVE_MODE) {
+		if (!_sortedOnce) {
 			let identityIndices = new Uint32Array(this.numSplats);
 			for (let i = 0; i < this.numSplats; i++) {
 				identityIndices[i] = i;
@@ -474,8 +467,8 @@ export class GaussianSplats extends SceneNode{
 		}
 
 		// Throttle: run depth + radix sort only every N frames, always on first sort
-		const shouldSortThisFrame = !SAFE_MODE && ((!_sortedOnce) || ((++_sortFrameCounter % SORT_EVERY_N_FRAMES) === 0));
-		if (shouldSortThisFrame && PROGRESSIVE_MODE && this.radixSortKernel) {
+		const shouldSortThisFrame = (!_sortedOnce) || ((++_sortFrameCounter % SORT_EVERY_N_FRAMES) === 0);
+		if (shouldSortThisFrame && this.radixSortKernel) {
 			let pass = commandEncoder.beginComputePass();
 
 			// First, create/update depth keys and identity values
@@ -514,8 +507,8 @@ export class GaussianSplats extends SceneNode{
 
 		this.updateUniforms(drawstate);
 
-		// If ordering not computed yet and not in safe mode, skip rendering
-		if (!_sortedOnce && !SAFE_MODE) {
+		// If ordering not computed yet, skip rendering
+		if (!_sortedOnce) {
 			let commandBuffer = commandEncoder.finish();
 			renderer.device.queue.submit([commandBuffer]);
 			return;
@@ -552,35 +545,23 @@ export class GaussianSplats extends SceneNode{
 		
 		passEncoder.setBindGroup(0, bindGroup);
 		
-		if (SAFE_MODE) {
-			// Minimal sanity draw: one triangle
-			passEncoder.draw(3, 1, 0, 0);
-		} else if (PROGRESSIVE_MODE) {
-			// Draw up to the progressive budget of splats
-			let splatsToDraw = Math.min(_progressiveSplatBudget, this.numSplats);
-			let verticesToDraw = splatsToDraw * 6;
-			
-			// Chunk draws to avoid GPU timeouts
-			let first = 0;
-			while (first < verticesToDraw) {
-				let count = Math.min(MAX_VERTICES_PER_DRAW, verticesToDraw - first);
-				passEncoder.draw(count, 1, first, 0);
-				first += count;
-			}
-			
-			// Increase budget each frame for smooth ramp
-			if (_progressiveSplatBudget < PROGRESSIVE_BUDGET_MAX) {
-				_progressiveSplatBudget = Math.min(_progressiveSplatBudget + PROGRESSIVE_BUDGET_INCREASE, PROGRESSIVE_BUDGET_MAX);
-			}
-		} else {
-			let totalVertices = this.numSplats * 6;
-			let first = 0;
-			while (first < totalVertices) {
-				let count = Math.min(MAX_VERTICES_PER_DRAW, totalVertices - first);
-				passEncoder.draw(count, 1, first, 0);
-				first += count;
-			}
+		// Draw up to the progressive budget of splats
+		let splatsToDraw = Math.min(_progressiveSplatBudget, this.numSplats);
+		let verticesToDraw = splatsToDraw * 6;
+		
+		// Chunk draws to avoid GPU timeouts
+		let first = 0;
+		while (first < verticesToDraw) {
+			let count = Math.min(MAX_VERTICES_PER_DRAW, verticesToDraw - first);
+			passEncoder.draw(count, 1, first, 0);
+			first += count;
 		}
+		
+		// Increase budget each frame for smooth ramp
+		if (_progressiveSplatBudget < PROGRESSIVE_BUDGET_MAX) {
+			_progressiveSplatBudget = Math.min(_progressiveSplatBudget + PROGRESSIVE_BUDGET_INCREASE, PROGRESSIVE_BUDGET_MAX);
+		}
+
 		passEncoder.end();
 		
 		Timer.timestamp(passEncoder, "gaussians-end");

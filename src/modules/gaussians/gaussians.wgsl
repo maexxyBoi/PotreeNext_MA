@@ -90,7 +90,7 @@ fn main_vertex(vertex : VertexIn) -> VertexOut {
 		a_positions[3u * splatIndex + 0], 
 		a_positions[3u * splatIndex + 1], 
 		a_positions[3u * splatIndex + 2], 
-		1.0f);
+		.01f);
 	var worldPos = uniforms.world * splatPos;
 	var viewPos = uniforms.view * worldPos;
 	var ndc = uniforms.proj * viewPos;

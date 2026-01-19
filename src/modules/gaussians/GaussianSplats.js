@@ -16,13 +16,10 @@ let splatSortKeys = null;
 let splatSortValues = null;
 let pipeline_depth = null;
 
-// Toggle heavy GPU readbacks/logs; keep this false for performance
-const DEBUG_READBACK = false;
 const PROGRESSIVE_BUDGET_INIT = 10000;     // start with 10k splats
 const PROGRESSIVE_BUDGET_INCREASE = 5000;  // add 5k each frame up to max
 const PROGRESSIVE_BUDGET_MAX = 500000;     // cap at 500k (show all splats)
 
-let dbg_frameCounter = 0;
 let _progressiveSplatBudget = PROGRESSIVE_BUDGET_INIT;
 let _lastCameraMatrix = new Matrix4();
 
@@ -50,12 +47,11 @@ async function init(renderer){
 	if(initializing) return;
 
 	initializing = true;
-	console.log("Initializing GaussianSplats...");
 	
 	try {
 		let {device} = renderer;
 		const colorFormat = "bgra8unorm"; // force blendable format (avoid rgba32float)
-		console.log("GaussianSplats init colorFormat:", colorFormat);
+		device.addEventListener('uncapturederror', event => console.error(event.error.message));
 		const initialSize = renderer.getSize ? renderer.getSize() : {width: 128, height: 128};
 
 		uniformsGpuBuffer = renderer.createBuffer({
@@ -278,16 +274,6 @@ export class GaussianSplats extends SceneNode{
 			f32.set(world.elements, 16);
 			f32.set(view.elements, 32);
 			f32.set(camera.proj.elements, 48);
-			
-			// Debug: log first splat position and camera info
-			if (this.splatData && dbg_frameCounter % 5 === 0) {
-				let posView = new Float32Array(this.splatData.positions);
-				let firstPos = [posView[0], posView[1], posView[2]];
-				console.log("DEBUG: First splat position:", firstPos);
-				console.log("DEBUG: splatData.positions type:", this.splatData.positions.constructor.name, "byteLength:", this.splatData.positions.byteLength);
-				console.log("DEBUG: Camera position:", camera.position);
-				console.log("DEBUG: Camera proj matrix elements[0,5]:", camera.proj.elements[0], camera.proj.elements[5]);
-			}
 		}
 
 		{ // misc
@@ -502,9 +488,6 @@ export class GaussianSplats extends SceneNode{
 		const passEncoder = commandEncoder.beginRenderPass(renderPassDescriptor);
 		Timer.timestamp(passEncoder, "gaussians-start");
 
-		console.log("Render pass descriptor depth load/store:", renderPassDescriptor.depthStencilAttachment.depthLoadOp, "/", renderPassDescriptor.depthStencilAttachment.depthStoreOp);
-		console.log("Pipeline depth compare mode:", "less");
-
 		this.updateUniforms(drawstate);
 
 		// If ordering not computed yet, skip rendering
@@ -514,20 +497,8 @@ export class GaussianSplats extends SceneNode{
 			return;
 		}
 
-		// let {passEncoder} = drawstate.pass;
 		passEncoder.setPipeline(pipeline);
 
-		// Bind groups should be cached...but I honestly don't care. 
-		// Why you can't just pass pointers to resources in WebGPU, like in modern 
-		// bindless APIs and even OpenGL since 2010 with NV_shader_buffer_load, remains a mystery.
-		console.log("Creating bind group with buffers:", {
-			uniforms: uniformsGpuBuffer.size,
-			ordering: splatSortValues.size,
-			position: splatBuffers.position.size,
-			color: splatBuffers.color.size,
-			rotation: splatBuffers.rotation.size,
-			scale: splatBuffers.scale.size,
-		});
 		let bindGroup = device.createBindGroup({
 			layout: layout,
 			entries: [
@@ -539,9 +510,6 @@ export class GaussianSplats extends SceneNode{
 				{binding: 5, resource: {buffer: splatBuffers.scale}},
 			],
 		});
-		console.log("Bind group created successfully");
-		
-		// verbose per-frame logs disabled for performance
 		
 		passEncoder.setBindGroup(0, bindGroup);
 		
@@ -567,18 +535,12 @@ export class GaussianSplats extends SceneNode{
 		Timer.timestamp(passEncoder, "gaussians-end");
 
 		let commandBuffer = commandEncoder.finish();
-		console.log("Command buffer finished");
-		
 		renderer.device.queue.submit([commandBuffer]);
-		console.log("Command buffer submitted");
-		// command submitted
 		
-		// Immediately capture validation errors
+		// Capture validation errors
 		device.popErrorScope().then(err => {
 			if (err) {
 				console.error("❌ GPU validation error in GaussianSplats:", err.message ?? err);
-			} else {
-				console.log("✓ No GPU validation errors");
 			}
 		}).catch(e => {
 			console.error("Error checking validation scope:", e);
@@ -588,22 +550,5 @@ export class GaussianSplats extends SceneNode{
 			fbo_blending, 
 			renderer.screenbuffer
 		);
-
-		// Debug: immediately readback pixels to see if anything rendered
-		const DEBUG_READBACK_ENABLED = false;
-		if (DEBUG_READBACK_ENABLED) {
-			let tex = fbo_blending.colorAttachments[0].texture;
-			console.log("DEBUG: Scheduling readback on texture", tex.width, "x", tex.height, "format:", tex.format);
-			
-			// Wait a tiny bit for GPU to finish, then readback center of screen
-			Promise.resolve().then(() => {
-				return renderer.readPixels(tex, Math.floor(tex.width/2) - 2, Math.floor(tex.height/2) - 2, 4, 4);
-			}).then(buf => {
-				let u32 = new Uint32Array(buf);
-				let sum = 0;
-				for (let i = 0; i < u32.length; i++) sum += u32[i];
-				console.log("DEBUG READBACK - center (4x4):", sum, "total pixels u32:", u32.length, "bytes:", buf.byteLength, "first 4 u32:", Array.from(u32.slice(0, 4)));
-			}).catch(err => console.error("GaussianSplats readPixels failed:", err));
-		}
 	}
 }

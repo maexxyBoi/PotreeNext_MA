@@ -16,7 +16,18 @@ let splatSortKeys = null;
 let splatSortValues = null;
 let pipeline_depth = null;
 
-let dbg = 0;
+const PROGRESSIVE_BUDGET_INIT = 10000;     // start with 10k splats
+const PROGRESSIVE_BUDGET_INCREASE = 5000;  // add 5k each frame up to max
+const PROGRESSIVE_BUDGET_MAX = 500000;     // cap at 500k (show all splats)
+
+let _progressiveSplatBudget = PROGRESSIVE_BUDGET_INIT;
+let _lastCameraMatrix = new Matrix4();
+
+// Throttle sorting to reduce per-frame cost
+const SORT_EVERY_N_FRAMES = 4;
+const MAX_VERTICES_PER_DRAW = 120_000; // cap per draw to avoid long GPU tasks (~20k splats)
+let _sortFrameCounter = 0;
+let _sortedOnce = false;
 
 let splatBuffers = {
 	numSplats: 0,
@@ -27,19 +38,8 @@ let splatBuffers = {
 	scale:     null,
 };
 
-// some reusable variables to reduce GC strain
-let _fm        = new Matrix4();
-let _frustum   = new Frustum();
-let _world     = new Matrix4();
+// Reusable matrix for world-view composition
 let _worldView = new Matrix4();
-let _rot       = new Matrix4();
-let _trans     = new Matrix4();
-let _pos       = new Vector4();
-let _pos2      = new Vector4();
-let _box       = new Box3();
-let _dirx      = new Vector3();
-let _diry      = new Vector3();
-let _dirz      = new Vector3();
 
 async function init(renderer){
 
@@ -48,136 +48,195 @@ async function init(renderer){
 
 	initializing = true;
 	
-	let {device} = renderer;
+	try {
+		let {device} = renderer;
+		const colorFormat = "bgra8unorm"; // force blendable format (avoid rgba32float)
+		device.addEventListener('uncapturederror', event => console.error(event.error.message));
+		const initialSize = renderer.getSize ? renderer.getSize() : {width: 128, height: 128};
 
-	uniformsGpuBuffer = renderer.createBuffer({
-		size: uniformsBuffer.byteLength,
-		usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
-	});
+		uniformsGpuBuffer = renderer.createBuffer({
+			size: uniformsBuffer.byteLength,
+			usage: GPUBufferUsage.UNIFORM | GPUBufferUsage.COPY_DST,
+		});
 
-	let size = [128, 128, 1];
-	let descriptor = {
-		size: size,
-		colorDescriptors: [
-			{
-				size: size,
-				format: "rgba16float",
+		let size = [initialSize.width, initialSize.height];
+		let descriptor = {
+			size: [...size, 1],
+			colorDescriptors: [
+				{
+					size: [...size, 1],
+					format: colorFormat,
+					usage: GPUTextureUsage.TEXTURE_BINDING 
+						| GPUTextureUsage.RENDER_ATTACHMENT
+						| GPUTextureUsage.COPY_SRC,
+				}
+			],
+			depthDescriptor: {
+				size: [...size, 1],
+				format: "depth32float",
 				usage: GPUTextureUsage.TEXTURE_BINDING 
 					| GPUTextureUsage.RENDER_ATTACHMENT,
 			}
-		],
-		depthDescriptor: {
-			size: size,
-			format: "depth32float",
-			usage: GPUTextureUsage.TEXTURE_BINDING 
-				| GPUTextureUsage.RENDER_ATTACHMENT,
-		}
-	};
+		};
+		console.log("BEFORE RenderTarget creation, descriptor.colorDescriptors[0].format:", descriptor.colorDescriptors[0].format);
 
-	fbo_blending = new RenderTarget(renderer, descriptor);
+		fbo_blending = new RenderTarget(renderer, descriptor);
+		
+		console.log("AFTER RenderTarget creation, actual texture format:", fbo_blending.colorAttachments[0].texture.format);
+		console.log("AFTER RenderTarget creation, stored descriptor format:", fbo_blending.colorAttachments[0].descriptor.format);
 
-	layout = renderer.device.createBindGroupLayout({
-		label: "gaussian splat uniforms",
-		entries: [
-			{
-				binding: 0,
-				visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT,
-				buffer: {type: 'uniform'},
-			},{
-				binding: 1,
-				visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT,
-				buffer: {type: 'read-only-storage'},
-			},{
-				binding: 2,
-				visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT,
-				buffer: {type: 'read-only-storage'},
-			},{
-				binding: 3,
-				visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT,
-				buffer: {type: 'read-only-storage'},
-			},{
-				binding: 4,
-				visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT,
-				buffer: {type: 'read-only-storage'},
-			},{
-				binding: 5,
-				visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT,
-				buffer: {type: 'read-only-storage'},
-			}
-		],
-	});
-
-	let shaderPath = `${import.meta.url}/../gaussians.wgsl`;
-	let response = await fetch(shaderPath);
-	let shaderSource = await response.text();
-
-	let module = device.createShaderModule({code: shaderSource});
-
-	let tStart = Date.now();
-
-	let blend = {
-		color: {
-			// srcFactor: "one",
-			// dstFactor: "one-minus-src-alpha",
-			srcFactor: "one-minus-dst-alpha",
-			dstFactor: "one",
-			operation: "add",
-		},
-		alpha: {
-			// srcFactor: "one",
-			// dstFactor: "one-minus-src-alpha",
-			srcFactor: "one-minus-dst-alpha",
-			dstFactor: "one",
-			operation: "add",
-		},
-	};
-
-	pipeline = device.createRenderPipeline({
-		layout: device.createPipelineLayout({
-			bindGroupLayouts: [layout],
-		}),
-		vertex: {
-			module,
-			entryPoint: "main_vertex",
-			buffers: []
-		},
-		fragment: {
-			module,
-			entryPoint: "main_fragment",
-			targets: [
-				{format: "rgba16float", blend: blend}
+		layout = renderer.device.createBindGroupLayout({
+			label: "gaussian splat uniforms",
+			entries: [
+				{
+					binding: 0,
+					visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT,
+					buffer: {type: 'uniform'},
+				},{
+					binding: 1,
+					visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT,
+					buffer: {type: 'read-only-storage'},
+				},{
+					binding: 2,
+					visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT,
+					buffer: {type: 'read-only-storage'},
+				},{
+					binding: 3,
+					visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT,
+					buffer: {type: 'read-only-storage'},
+				},{
+					binding: 4,
+					visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT,
+					buffer: {type: 'read-only-storage'},
+				},{
+					binding: 5,
+					visibility: GPUShaderStage.VERTEX | GPUShaderStage.FRAGMENT,
+					buffer: {type: 'read-only-storage'},
+				}
 			],
-		},
-		primitive: {
-			topology: 'triangle-list',
-			cullMode: 'none',
-		},
-		depthStencil: {
-			depthWriteEnabled: false,
-			depthCompare: 'greater',
-			format: "depth32float",
-		},
-	});
-	let duration = Date.now() - tStart;
+		});
 
-
-	{ // sort stuff
-		splatSortKeys        = renderer.createBuffer({size: 4 * 10_000_000});
-		splatSortValues      = renderer.createBuffer({size: 4 * 10_000_000});
-
-		let shaderPath = `${import.meta.url}/../gaussians_distance.wgsl`;
+		// Fetch shader source from external file
+		let shaderPath = `${import.meta.url}/../gaussians.wgsl?t=${Date.now()}`;
+		console.log("Fetching main shader:", shaderPath);
 		let response = await fetch(shaderPath);
+		if (!response.ok) {
+			throw new Error(`Failed to fetch gaussians shader: ${response.status} ${response.statusText}`);
+		}
 		let shaderSource = await response.text();
+		console.log("Main shader source length:", shaderSource.length);
 
 		let module = device.createShaderModule({code: shaderSource});
-		pipeline_depth = device.createComputePipeline({
-			layout: "auto",
-			compute: {module: module}
+		
+		// Check compilation info synchronously
+		let compilationInfo = await module.getCompilationInfo();
+		console.log("Shader compilation info - message count:", compilationInfo.messages.length);
+		for (let msg of compilationInfo.messages) {
+			let prefix = "gaussians embedded shader (" + msg.type.toUpperCase() + ")";
+			let logFn = msg.type === "error" ? console.error : console.warn;
+			logFn(prefix, "line", msg.lineNum, "col", msg.linePos, ":", msg.message);
+		}
+		
+		console.log("Shader module created");
+
+		// log device lost once
+		device.lost.then(info => {
+			console.error("GPU device lost (GaussianSplats):", info.message, info.reason);
 		});
+
+		let tStart = Date.now();
+
+		let blend = {
+			color: {
+				srcFactor: "src-alpha",
+				dstFactor: "one-minus-src-alpha",
+				operation: "add",
+			},
+			alpha: {
+				srcFactor: "one",
+				dstFactor: "one-minus-src-alpha",
+				operation: "add",
+			},
+		};
+
+		device.pushErrorScope("validation");
+		try {
+			pipeline = device.createRenderPipeline({
+				layout: device.createPipelineLayout({
+					bindGroupLayouts: [layout],
+				}),
+				vertex: {
+					module,
+					entryPoint: "main_vertex",
+					buffers: []
+				},
+				fragment: {
+					module,
+					entryPoint: "main_fragment",
+					targets: [
+						{format: colorFormat, blend: blend}
+					],
+				},
+				primitive: {
+					topology: 'triangle-list',
+					cullMode: 'none',
+				},
+				depthStencil: {
+					depthWriteEnabled: false,
+					depthCompare: 'always',
+					format: "depth32float",
+				},
+			});
+			let duration = Date.now() - tStart;
+			console.log("Pipeline created in", duration, "ms");
+			console.log("Pipeline target format was:", colorFormat);
+			console.log("Pipeline fragment targets:", pipeline.getBindGroupLayout ? "available" : "N/A");
+		} catch (e) {
+			console.error("Failed to create GaussianSplats pipeline:", e);
+			initializing = false;
+			return;
+		}
+		device.popErrorScope().then(err => {
+			if (err) {
+				console.error("Pipeline validation error:", err.message ?? err);
+			}
+		});
+
+
+		{ // sort stuff
+			splatSortKeys        = renderer.createBuffer({size: 4 * 10_000_000});
+			splatSortValues      = renderer.createBuffer({size: 4 * 10_000_000});
+
+			let shaderPath = `${import.meta.url}/../gaussians_distance.wgsl?t=${Date.now()}`;
+			console.log("Fetching distance shader:", shaderPath);
+			let response = await fetch(shaderPath);
+			if (!response.ok) {
+				throw new Error(`Failed to fetch distance shader: ${response.status} ${response.statusText}`);
+			}
+			let shaderSource = await response.text();
+			console.log("Distance shader source length:", shaderSource.length);
+
+			let module = device.createShaderModule({code: shaderSource});
+			module.getCompilationInfo().then(info => {
+				for (let msg of info.messages) {
+					console[msg.type === "error" ? "error" : "warn"]("gaussians_distance.wgsl:", msg.lineNum, msg.message);
+				}
+			});
+			console.log("Distance shader module created");
+			pipeline_depth = device.createComputePipeline({
+				layout: "auto",
+				compute: {module: module}
+			});
+			console.log("Depth pipeline created");
+		}
+
+		initialized = true;
+		console.log("GaussianSplats initialization completed successfully");
+	} catch (error) {
+		console.error("Error during GaussianSplats initialization:", error);
+		initializing = false;
+		throw error;
 	}
-
-
-	initialized = true;
 }
 
 export class GaussianSplats extends SceneNode{
@@ -189,26 +248,12 @@ export class GaussianSplats extends SceneNode{
 		this.dispatcher = new EventDispatcher();
 		this.initialized = false;
 
-		this.positions = new Float32Array([
-			0.2, 0.2, 0.0,
-			0.4, 0.2, 0.0,
-			0.4, 0.4, 0.0,
-			0.2, 0.2, 0.0,
-			0.4, 0.4, 0.0,
-			0.2, 0.4, 0.0,
-		]);
-
 		this.splatData = null;
 		this.numSplatsUploaded = 0;
 	}
 
 	setHovered(index){
-		// this.hoveredIndex = index;
-		// this.dispatcher.dispatch("hover", {
-		// 	images: this,
-		// 	index: index,
-		// 	image: this.images[index],
-		// });
+		// Placeholder for hover interaction
 	}
 
 	updateUniforms(drawstate){
@@ -229,7 +274,6 @@ export class GaussianSplats extends SceneNode{
 			f32.set(world.elements, 16);
 			f32.set(view.elements, 32);
 			f32.set(camera.proj.elements, 48);
-			// debugger;
 		}
 
 		{ // misc
@@ -264,10 +308,21 @@ export class GaussianSplats extends SceneNode{
 		let {renderer, camera} = drawstate;
 		let {device} = renderer;
 
+		console.log("GaussianSplats render called, numSplats:", this.numSplats, "initialized:", initialized, "pipeline ready:", !!pipeline);
+		console.log("fbo format:", fbo_blending?.colorAttachments?.[0]?.descriptor?.format);
+
 		init(renderer);
-		if(!initialized) return;
+		if(!initialized) {
+			console.warn("GaussianSplats not initialized, skipping render");
+			return;
+		}
 
 		fbo_blending.setSize(...renderer.screenbuffer.size);
+		console.log("After setSize, fbo texture format:", fbo_blending.colorAttachments[0].texture.format);
+		console.log("After setSize, fbo descriptor format:", fbo_blending.colorAttachments[0].descriptor.format);
+
+		// track GPU validation errors for this frame
+		device.pushErrorScope("validation");
 
 		let colorAttachments = [{
 			view: fbo_blending.colorAttachments[0].texture.createView(), 
@@ -275,75 +330,141 @@ export class GaussianSplats extends SceneNode{
 			clearValue: { r: 0.0, g: 0.0, b: 0.0, a: 0.0 },
 			storeOp: 'store',
 		}];
+		
+		console.log("RENDER SETUP: colorAttachments[0].view exists:", !!colorAttachments[0].view);
+		console.log("RENDER SETUP: fbo_blending.colorAttachments[0].texture:", fbo_blending.colorAttachments[0].texture.width, "x", fbo_blending.colorAttachments[0].texture.height);
 
 		let renderPassDescriptor = {
 			colorAttachments,
 			depthStencilAttachment: {
 				view: renderer.screenbuffer.depth.texture.createView(),
-				depthLoadOp: "load",
+				depthLoadOp: "clear",
+				depthClearValue: 1.0,
 				depthStoreOp: "store",
 			},
 			sampleCount: 1,
 		};
 
-		if(this.numSplats === 0) return;
+		if(this.numSplats === 0) {
+			console.log("numSplats is 0, skipping render");
+			return;
+		}
 
-		if(!this.radixSortKernel || this.radixSortKernel.count != this.numSplats){
-			this.radixSortKernel = new RadixSortKernel({
-				device,
-				keys: splatSortKeys,
-				values: splatSortValues,
-				count: this.numSplats,
-				bit_count: 32,
-			})
+		console.log("numSplatsLoaded:", this.numSplatsLoaded, "numSplatsUploaded:", this.numSplatsUploaded, "splatBuffers.numSplats:", splatBuffers.numSplats);
+
+		if(!this.splatData) {
+			console.log("splatData not loaded yet, skipping render");
+			return;
 		}
 
 		// Transfer data to GPU
 		if(this.splatData && splatBuffers.numSplats === 0){
+			console.log("Creating splat buffers");
 			// create splat buffer
 			splatBuffers.numSplats = this.numSplats;
 			splatBuffers.position = renderer.createBuffer({size: this.numSplats * 12});
 			splatBuffers.color    = renderer.createBuffer({size: this.numSplats * 16});
 			splatBuffers.rotation = renderer.createBuffer({size: this.numSplats * 16});
 			splatBuffers.scale    = renderer.createBuffer({size: this.numSplats * 12});
+			console.log("Splat buffers created");
 		}
 
 		if(this.numSplatsLoaded > this.numSplatsUploaded){
-			let transfer = (target, source, offset, size) => {
-				device.queue.writeBuffer(
-					target, offset,
-					source, offset, 
-					size 
-				);
-			};
+			console.log("Uploading splat data from", this.numSplatsUploaded, "to", this.numSplatsLoaded);
+			
+			// Create typed array views from ArrayBuffers
+			let posView = new Float32Array(this.splatData.positions);
+			let colView = new Float32Array(this.splatData.color);
+			let rotView = new Float32Array(this.splatData.rotation);
+			let scaleView = new Float32Array(this.splatData.scale);
 
 			let numNew = this.numSplatsLoaded - this.numSplatsUploaded;
-			transfer(splatBuffers.position, this.splatData.positions, 12 * this.numSplatsUploaded, 12 * numNew);
-			transfer(splatBuffers.color   , this.splatData.color    , 16 * this.numSplatsUploaded, 16 * numNew);
-			transfer(splatBuffers.rotation, this.splatData.rotation , 16 * this.numSplatsUploaded, 16 * numNew);
-			transfer(splatBuffers.scale   , this.splatData.scale    , 12 * this.numSplatsUploaded, 12 * numNew);
+			const BATCH_SIZE = 10000;
+			let uploaded = 0;
+			while (uploaded < numNew) {
+				let batchSize = Math.min(BATCH_SIZE, numNew - uploaded);
+				let start = this.numSplatsUploaded + uploaded;
+				console.log("Uploading batch from", start, "size", batchSize);
+				
+				// Create subarrays for this batch (start at 'start' index, copy 'batchSize' elements)
+				let posBatch = posView.subarray(start * 3, (start + batchSize) * 3);
+				let colBatch = colView.subarray(start * 4, (start + batchSize) * 4);
+				let rotBatch = rotView.subarray(start * 4, (start + batchSize) * 4);
+				let scaleBatch = scaleView.subarray(start * 3, (start + batchSize) * 3);
+				
+				try {
+					// Upload to GPU at the correct offset (in bytes)
+					device.queue.writeBuffer(splatBuffers.position, start * 12, posBatch);
+					device.queue.writeBuffer(splatBuffers.color, start * 16, colBatch);
+					device.queue.writeBuffer(splatBuffers.rotation, start * 16, rotBatch);
+					device.queue.writeBuffer(splatBuffers.scale, start * 12, scaleBatch);
+				} catch (error) {
+					console.error("Error in writeBuffer for batch at", start, ":", error);
+					throw error;
+				}
+				
+				uploaded += batchSize;
+			}
 
 			this.numSplatsUploaded += numNew;
+			// New data uploaded; force a sort next frame
+			_sortedOnce = false;
+			_progressiveSplatBudget = PROGRESSIVE_BUDGET_INIT;
+			console.log("Upload completed, numSplatsUploaded:", this.numSplatsUploaded);
+		}
 
-			// transfer(splatBuffers.position, this.splatData.positions);
-			// transfer(splatBuffers.color, this.splatData.color);
-			// transfer(splatBuffers.rotation, this.splatData.rotation);
-			// transfer(splatBuffers.scale, this.splatData.scale);
+		console.log("Creating radix sort kernel for", this.numSplats, "splats");
+		if(!this.radixSortKernel || this.radixSortKernel.count != this.numSplats){
+			try {
+				this.radixSortKernel = new RadixSortKernel({
+					device,
+					keys: splatSortKeys,
+					values: splatSortValues,
+					count: this.numSplats,
+					bit_count: 32,
+				});
+				console.log("Radix sort kernel created successfully");
+			} catch (error) {
+				console.error("Failed to create radix sort kernel:", error);
+				return;
+			}
 		}
 
 		const commandEncoder = renderer.device.createCommandEncoder();
 
-		{ // SORT
-			let pass = commandEncoder.beginComputePass()
+		// Ensure sort buffers are sized to current splat count (u32 per entry)
+		const requiredBytes = this.numSplats * 4;
+		if (!splatSortKeys || splatSortKeys.size < requiredBytes) {
+			splatSortKeys = renderer.createBuffer({ size: requiredBytes });
+		}
+		if (!splatSortValues || splatSortValues.size < requiredBytes) {
+			splatSortValues = renderer.createBuffer({ size: requiredBytes });
+		}
 
-			// First, create a buffer of depth values
+		// CPU-init identity ordering on first frame (avoid GPU compute for now)
+		if (!_sortedOnce) {
+			let identityIndices = new Uint32Array(this.numSplats);
+			for (let i = 0; i < this.numSplats; i++) {
+				identityIndices[i] = i;
+			}
+			renderer.device.queue.writeBuffer(splatSortValues, 0, identityIndices);
+			_sortedOnce = true;
+			console.log("CPU-initialized splat ordering (identity) for", this.numSplats, "splats");
+		}
+
+		// Throttle: run depth + radix sort only every N frames, always on first sort
+		const shouldSortThisFrame = (!_sortedOnce) || ((++_sortFrameCounter % SORT_EVERY_N_FRAMES) === 0);
+		if (shouldSortThisFrame && this.radixSortKernel) {
+			let pass = commandEncoder.beginComputePass();
+
+			// First, create/update depth keys and identity values
 			let bindGroup = device.createBindGroup({
 				layout: pipeline_depth.getBindGroupLayout(0),
 				entries: [
-				{ binding: 0, resource: { buffer: uniformsGpuBuffer }},
-				{ binding: 1, resource: { buffer: splatBuffers.position }},
-				{ binding: 2, resource: { buffer: splatSortKeys }},
-				{ binding: 3, resource: { buffer: splatSortValues }},
+					{ binding: 0, resource: { buffer: uniformsGpuBuffer }},
+					{ binding: 1, resource: { buffer: splatBuffers.position }},
+					{ binding: 2, resource: { buffer: splatSortKeys }},
+					{ binding: 3, resource: { buffer: splatSortValues }},
 				],
 			});
 
@@ -352,11 +473,16 @@ export class GaussianSplats extends SceneNode{
 			let numGroups = Math.ceil(Math.sqrt(this.numSplats / 256));
 			pass.dispatchWorkgroups(numGroups, numGroups, 1);
 
-			// then sort
-			this.radixSortKernel.dispatch(pass);
+			// then radix sort the keys/values in-place
+			try {
+				this.radixSortKernel.dispatch(pass);
+			} catch (error) {
+				console.error("Error during radix sort dispatch:", error);
+				pass.end();
+				return;
+			}
 			pass.end();
-
-
+			_sortedOnce = true;
 		}
 
 		const passEncoder = commandEncoder.beginRenderPass(renderPassDescriptor);
@@ -364,12 +490,15 @@ export class GaussianSplats extends SceneNode{
 
 		this.updateUniforms(drawstate);
 
-		// let {passEncoder} = drawstate.pass;
+		// If ordering not computed yet, skip rendering
+		if (!_sortedOnce) {
+			let commandBuffer = commandEncoder.finish();
+			renderer.device.queue.submit([commandBuffer]);
+			return;
+		}
+
 		passEncoder.setPipeline(pipeline);
 
-		// Bind groups should be cached...but I honestly don't care. 
-		// Why you can't just pass pointers to resources in WebGPU, like in modern 
-		// bindless APIs and even OpenGL since 2010 with NV_shader_buffer_load, remains a mystery.
 		let bindGroup = device.createBindGroup({
 			layout: layout,
 			entries: [
@@ -381,9 +510,26 @@ export class GaussianSplats extends SceneNode{
 				{binding: 5, resource: {buffer: splatBuffers.scale}},
 			],
 		});
-
+		
 		passEncoder.setBindGroup(0, bindGroup);
-		passEncoder.draw(6 * this.numSplats);
+		
+		// Draw up to the progressive budget of splats
+		let splatsToDraw = Math.min(_progressiveSplatBudget, this.numSplats);
+		let verticesToDraw = splatsToDraw * 6;
+		
+		// Chunk draws to avoid GPU timeouts
+		let first = 0;
+		while (first < verticesToDraw) {
+			let count = Math.min(MAX_VERTICES_PER_DRAW, verticesToDraw - first);
+			passEncoder.draw(count, 1, first, 0);
+			first += count;
+		}
+		
+		// Increase budget each frame for smooth ramp
+		if (_progressiveSplatBudget < PROGRESSIVE_BUDGET_MAX) {
+			_progressiveSplatBudget = Math.min(_progressiveSplatBudget + PROGRESSIVE_BUDGET_INCREASE, PROGRESSIVE_BUDGET_MAX);
+		}
+
 		passEncoder.end();
 		
 		Timer.timestamp(passEncoder, "gaussians-end");
@@ -391,10 +537,18 @@ export class GaussianSplats extends SceneNode{
 		let commandBuffer = commandEncoder.finish();
 		renderer.device.queue.submit([commandBuffer]);
 		
+		// Capture validation errors
+		device.popErrorScope().then(err => {
+			if (err) {
+				console.error("❌ GPU validation error in GaussianSplats:", err.message ?? err);
+			}
+		}).catch(e => {
+			console.error("Error checking validation scope:", e);
+		});
+		
 		compose(renderer, 
 			fbo_blending, 
 			renderer.screenbuffer
 		);
 	}
-
 }

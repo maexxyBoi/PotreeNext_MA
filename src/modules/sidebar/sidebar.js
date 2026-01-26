@@ -354,7 +354,7 @@ function ellipseVolume(newBounds, splats){
 	
 }
 function integrationVolume(newBounds, splats){
-	
+	getSplatsAndIntegrate(newBounds, splats)
 }
 
 function calcBounds(measure) {
@@ -446,4 +446,12 @@ function recDrawingBBTest (newBounds, octreeNode) {
 			recDrawingBBTest(newBounds, element)
 		}
 	});
+}
+
+function getSplatsAndIntegrate(newBounds, splats) {
+	//FIXME i mean theoretically, we just iterate over every index 
+	//and then just integrate. SOunds simple, but where is the X of the function?
+	// ok and by the way, rot and scale are 16 and 12 bytes(?)/entries in the 
+	//splatbuffer long, see gaussiansplats.js @364 ff
+	//and in the splatData field of the scene, it looks suspiciously similar
 }

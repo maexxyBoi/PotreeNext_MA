@@ -1,4 +1,3 @@
-
 export class RenderTarget{
 
 	constructor(renderer, params = {}){

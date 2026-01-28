@@ -41,12 +41,11 @@ fn main_vertex(
 	var worldPos = uniforms.world * splatPos;
 	var viewPos = uniforms.view * worldPos;
 
-	var depth = -viewPos.z;
-	var value = splatIndex;
-
-	// depth = 10000.0f - depth;
-	// depth = f32(splatIndex);
-
-	o_keys[splatIndex] = bitcast<u32>(depth);
-	o_values[splatIndex] = splatIndex;
+	var depth = -viewPos.z;  // Positive for objects in front
+    
+    // Simple inversion: furthest (large depth) → small key → renders first
+    var sortKey = bitcast<u32>(100000.0 - depth);
+    
+    o_keys[splatIndex] = sortKey;
+    o_values[splatIndex] = splatIndex;
 }

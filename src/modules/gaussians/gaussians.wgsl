@@ -207,7 +207,7 @@ fn main_vertex(vertex : VertexIn) -> VertexOut {
 
     vout.position = uniforms.proj * viewPos;
     vout.color = a_color[splatIndex];
-    vout.pos = worldVertexPos  // per-vertex world position on the quad
+    vout.pos = worldVertexPos;  // per-vertex world position on the quad
 	//worldPos.xyz
 	return vout;
 }

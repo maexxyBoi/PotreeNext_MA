@@ -41,6 +41,8 @@ let splatBuffers = {
 // Reusable matrix for world-view composition
 let _worldView = new Matrix4();
 
+export {fbo_blending};
+
 async function init(renderer){
 
 	if(initialized) return;
@@ -51,7 +53,7 @@ async function init(renderer){
 	try {
 		let {device} = renderer;
 		const colorFormat = "bgra8unorm"; // force blendable format (avoid rgba32float)
-		device.addEventListener('uncapturederror', event => console.error(event.error.message));
+		//device.addEventListener('uncapturederror', event => console.error(event.error.message));
 		const initialSize = renderer.getSize ? renderer.getSize() : {width: 128, height: 128};
 
 		uniformsGpuBuffer = renderer.createBuffer({
@@ -69,6 +71,13 @@ async function init(renderer){
 					usage: GPUTextureUsage.TEXTURE_BINDING 
 						| GPUTextureUsage.RENDER_ATTACHMENT
 						| GPUTextureUsage.COPY_SRC,
+				},
+				{  // i need this for picking :roll_eyes: :hot_face:
+					size: [...size, 1],
+					format: "rgba32float", 
+					usage: GPUTextureUsage.TEXTURE_BINDING 
+						| GPUTextureUsage.RENDER_ATTACHMENT
+						| GPUTextureUsage.COPY_SRC,
 				}
 			],
 			depthDescriptor: {
@@ -78,12 +87,10 @@ async function init(renderer){
 					| GPUTextureUsage.RENDER_ATTACHMENT,
 			}
 		};
-		console.log("BEFORE RenderTarget creation, descriptor.colorDescriptors[0].format:", descriptor.colorDescriptors[0].format);
+
 
 		fbo_blending = new RenderTarget(renderer, descriptor);
 		
-		console.log("AFTER RenderTarget creation, actual texture format:", fbo_blending.colorAttachments[0].texture.format);
-		console.log("AFTER RenderTarget creation, stored descriptor format:", fbo_blending.colorAttachments[0].descriptor.format);
 
 		layout = renderer.device.createBindGroupLayout({
 			label: "gaussian splat uniforms",
@@ -173,8 +180,9 @@ async function init(renderer){
 				fragment: {
 					module,
 					entryPoint: "main_fragment",
-					targets: [
-						{format: colorFormat, blend: blend}
+					targets: [								//  ||||
+						{format: colorFormat, blend: blend}, // vvvv there, more picking
+						{format: "rgba32float", writeMask: GPUColorWrite.ALL} 
 					],
 				},
 				primitive: {
@@ -258,7 +266,7 @@ export class GaussianSplats extends SceneNode{
 
 	updateUniforms(drawstate){
 
-		let {renderer, camera} = drawstate;
+		let {renderer, camera, renderables, dbgSphere} = drawstate;
 		let {device} = renderer;
 
 		let f32 = new Float32Array(uniformsBuffer);
@@ -305,7 +313,7 @@ export class GaussianSplats extends SceneNode{
 	render(drawstate){
 
 
-		let {renderer, camera} = drawstate;
+		let {renderer, camera, renderables} = drawstate;
 		let {device} = renderer;
 
 		console.log("GaussianSplats render called, numSplats:", this.numSplats, "initialized:", initialized, "pipeline ready:", !!pipeline);
@@ -329,11 +337,15 @@ export class GaussianSplats extends SceneNode{
 			loadOp: "clear", 
 			clearValue: { r: 0.0, g: 0.0, b: 0.0, a: 0.0 },
 			storeOp: 'store',
-		}];
+		},
+		{ 
+			view: fbo_blending.colorAttachments[1].texture.createView(), 
+			loadOp: "clear", 
+			clearValue: { r: 0.0, g: 0.0, b: 0.0, a: 0.0 },
+			storeOp: 'store',
+    	}
+		];
 		
-		console.log("RENDER SETUP: colorAttachments[0].view exists:", !!colorAttachments[0].view);
-		console.log("RENDER SETUP: fbo_blending.colorAttachments[0].texture:", fbo_blending.colorAttachments[0].texture.width, "x", fbo_blending.colorAttachments[0].texture.height);
-
 		let renderPassDescriptor = {
 			colorAttachments,
 			depthStencilAttachment: {
@@ -350,8 +362,6 @@ export class GaussianSplats extends SceneNode{
 			return;
 		}
 
-		console.log("numSplatsLoaded:", this.numSplatsLoaded, "numSplatsUploaded:", this.numSplatsUploaded, "splatBuffers.numSplats:", splatBuffers.numSplats);
-
 		if(!this.splatData) {
 			console.log("splatData not loaded yet, skipping render");
 			return;
@@ -359,18 +369,15 @@ export class GaussianSplats extends SceneNode{
 
 		// Transfer data to GPU
 		if(this.splatData && splatBuffers.numSplats === 0){
-			console.log("Creating splat buffers");
 			// create splat buffer
 			splatBuffers.numSplats = this.numSplats;
 			splatBuffers.position = renderer.createBuffer({size: this.numSplats * 12});
 			splatBuffers.color    = renderer.createBuffer({size: this.numSplats * 16});
 			splatBuffers.rotation = renderer.createBuffer({size: this.numSplats * 16});
 			splatBuffers.scale    = renderer.createBuffer({size: this.numSplats * 12});
-			console.log("Splat buffers created");
 		}
 
 		if(this.numSplatsLoaded > this.numSplatsUploaded){
-			console.log("Uploading splat data from", this.numSplatsUploaded, "to", this.numSplatsLoaded);
 			
 			// Create typed array views from ArrayBuffers
 			let posView = new Float32Array(this.splatData.positions);
@@ -410,10 +417,8 @@ export class GaussianSplats extends SceneNode{
 			// New data uploaded; force a sort next frame
 			_sortedOnce = false;
 			_progressiveSplatBudget = PROGRESSIVE_BUDGET_INIT;
-			console.log("Upload completed, numSplatsUploaded:", this.numSplatsUploaded);
 		}
 
-		console.log("Creating radix sort kernel for", this.numSplats, "splats");
 		if(!this.radixSortKernel || this.radixSortKernel.count != this.numSplats){
 			try {
 				this.radixSortKernel = new RadixSortKernel({
@@ -545,10 +550,12 @@ export class GaussianSplats extends SceneNode{
 		}).catch(e => {
 			console.error("Error checking validation scope:", e);
 		});
-		
+
+
+
 		compose(renderer, 
 			fbo_blending, 
 			renderer.screenbuffer
 		);
-	}
+	}		
 }

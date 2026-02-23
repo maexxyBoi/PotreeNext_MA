@@ -5,8 +5,7 @@ import {EventDispatcher, KeyCodes, MouseCodes} from "potree";
 let counter = 0;
 export const sliceString = "Concave Hull Slicing";
 export const octreesString = "Octrees";
-export const ellipseString = "Error Ellipse";
-export const integrateString = "Integration";
+export const meshString = "Mesh Extraction Volume";
 
 
 export class Measure{
@@ -125,8 +124,7 @@ export class InnerVolMeasure extends Measure{
 				<select id="innerOption">
 					<option value="Concave Hull Slicing">Pointcloud: ${sliceString}</option>
 					<option value="Octrees">Pointcloud: ${octreesString}</option>
-					<option value="Error Ellipse">Gaussians: ${ellipseString}</option>
-					<option value="Integration">Gaussians: ${integrateString}</option>
+					<option value="Mesh Extraction Volume">Gaussians: ${meshString}</option>
 				</select>
 				<br></br>
 				<button id="innerCalc">Calculate Volume</button>

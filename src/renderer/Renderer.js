@@ -368,8 +368,19 @@ export class Renderer{
 		let copySize = {width, height, depthOrArrayLayers: 1};
 
 		const copyEncoder = this.device.createCommandEncoder();
-		copyEncoder.copyTextureToBuffer(source, destination, copySize);
-
+		
+		try {
+			copyEncoder.copyTextureToBuffer(source, destination, copySize);
+		} 
+		catch(e){
+			if(e.message.includes("Failed to execute 'copyTextureToBuffer")){
+				//Nothing, it works when needed, and if it is not needed
+				//it throws an error which totally pollutes the console
+			}
+			else {
+				console.log(e);
+			}
+		}
 		// Submit copy commands.
 		const copyCommands = copyEncoder.finish();
 		this.device.queue.submit([copyCommands]);

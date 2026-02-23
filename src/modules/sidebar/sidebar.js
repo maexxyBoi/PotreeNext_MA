@@ -6,7 +6,7 @@ import {createPanel as createAppearancePanel} from "./panel_appearance.js";
 import {createPanel as createInfosPanel} from "./panel_infos.js";
 import {createPanel as createHoveredPanel} from "./panel_hovered.js";
 import {createPanel as createScenePanel} from "./panel_scene.js";
-import { Measure, sliceString, octreesString, ellipseString, integrateString } from "../../interaction/measure.js";
+import { Measure, sliceString, octreesString, meshString } from "../../interaction/measure.js";
 import { GaussianSplats, PointCloudOctree, Vector3, Box3 } from "../../Potree.js";
 import { simpleOctree, simpleOctreeNode } from "../../potree/octree/simpleOctree.js";
 
@@ -242,6 +242,7 @@ function calculateInnerVolume(id, elDropdown)
 	let option = elDropdown[0].value
 	console.log(option)
 
+	//Bounds set by measurement 
 	let newBounds = calcBounds(measure)
 	let pointClouds = potree.scene.root.children.filter((entry) => entry instanceof PointCloudOctree)
 	let splats = potree.scene.root.children.filter((entry) => entry instanceof GaussianSplats)
@@ -257,86 +258,34 @@ function calculateInnerVolume(id, elDropdown)
 		measure.measureOctBoxes = []
 		octreeVolume(newBounds, pointClouds, measure)
 	}
-	if (option === ellipseString){
-		console.log(ellipseString)
-		ellipseVolume(newBounds, splats)
-	}
-	if (option === integrateString){
-		console.log(integrateString)
-		integrationVolume(newBounds, splats)
+	if (option === meshString){
+		console.log(meshString)
+		meshVol(newBounds, splats)
 	}
 }
 
 function concaveSlicing(newBounds, pointClouds){
-	let result = {
-		minZPoint: null,
-		maxZPoint: null,
-		minZ: Infinity,
-		maxZ: -Infinity
-	};
 
-	pointClouds.forEach(octree => {
-		if (octree.root) {
-			traverseOctreeForPoints(octree.root, newBounds, (node) => {
-				if (node.loaded && node.geometry) {
-					scanNodeForMinMaxZ(node, newBounds, result);
-				} else {
-					// Load the node if not loaded
-					octree.load(node);
-				}
-			});
-		}
-	});
+	//test
+	console.log(newBounds);
+	let sliceAmount = 8; //FIXME change this to changeable
+	let slices = [];
+	let intervalSpace = ( newBounds.max - newBounds.min ) / 8;//FIXME CHANGE ARITHMETICS TO VECTOR3EMTHOD
+	//slice along longes axis
+	
+	for (let i = 0; i < sliceAmount; i++){
+		slices.push(new Box3(newBounds.min.clone() + i * intervalSpace,
+					(newBounds.max + (i+1) * intervalSpace )));
+	}//FIXME CHANGE ARITHMETICS TO VECTOR3EMTHOD//FIXME CHANGE ARITHMETICS TO VECTOR3EMTHOD//FIXME CHANGE ARITHMETICS TO VECTOR3EMTHOD
+	console.log(slices);
 
-	console.log("Min Z Point:", result.minZPoint);
-	console.log("Max Z Point:", result.maxZPoint);
 }
 
-function traverseOctreeForPoints(node, bounds, callback) {
-	if (!node.boundingBox.intersectsBox(bounds)) {
-		return;
-	}
-
-	let isLeaf = node.children.every(child => child === null);
-	if (isLeaf) {
-		callback(node);
-	} else {
-		node.children.forEach(child => {
-			if (child) {
-				traverseOctreeForPoints(child, bounds, callback);
-			}
-		});
-	}
-}
-
-function scanNodeForMinMaxZ(node, bounds, result) {
-	let geometry = node.geometry;
-	let view = new DataView(geometry.buffer);
-	let numPoints = geometry.numElements;
-	let octreePos = node.octree.position;
-
-	for (let i = 0; i < numPoints; i++) {
-		let x = view.getFloat32(12 * i + 0, true) + octreePos.x;
-		let y = view.getFloat32(12 * i + 4, true) + octreePos.y;
-		let z = view.getFloat32(12 * i + 8, true) + octreePos.z;
-
-		let pointPos = new Vector3(x, y, z);
-		if (bounds.containsPoint(pointPos)) {
-			if (z < result.minZ) {
-				result.minZ = z;
-				result.minZPoint = { position: pointPos };
-			}
-			if (z > result.maxZ) {
-				result.maxZ = z;
-				result.maxZPoint = { position: pointPos };
-			}
-		}
-	}
-}
 function octreeVolume(newBounds, pointClouds, measure){
 	let results = {}
 	let originalLeaves = []
 	let secondTree = new simpleOctree();
+	let starttime = performance.now();
 	secondTree.setBounds(newBounds);
 	pointClouds.forEach(element => {
 		if(element.root) {
@@ -348,10 +297,8 @@ function octreeVolume(newBounds, pointClouds, measure){
 			recCalcVol(secondTree.root, originalLeaves, measure, results)
 		}
 	});
-	console.log(results)
-}
-function ellipseVolume(newBounds, splats){
-	
+	let endtime = performance.now();
+	console.log("Volume: ", results, ". Time taken: ", endtime - starttime, "ms")
 }
 function integrationVolume(newBounds, splats){
 	getSplatsAndIntegrate(newBounds, splats)
@@ -448,10 +395,5 @@ function recDrawingBBTest (newBounds, octreeNode) {
 	});
 }
 
-function getSplatsAndIntegrate(newBounds, splats) {
-	//FIXME i mean theoretically, we just iterate over every index 
-	//and then just integrate. SOunds simple, but where is the X of the function?
-	// ok and by the way, rot and scale are 16 and 12 bytes(?)/entries in the 
-	//splatbuffer long, see gaussiansplats.js @364 ff
-	//and in the splatData field of the scene, it looks suspiciously similar
+function meshVol(newBounds, splats) {
 }

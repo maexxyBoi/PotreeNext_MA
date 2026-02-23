@@ -1,19 +1,20 @@
 
-import {Vector3, Ray} from "potree";
+import { 
+	renderPointsOctree, renderQuadsOctree, Vector3, Ray
+} from "potree";
 import {
 	Scene, SceneNode, Camera, OrbitControls, PotreeControls, StationaryControls, Mesh, RenderTarget,
-	PointCloudOctree,
+	PointCloudOctree, dilate, EDL, hqs_normalize
 } from "potree";
+
 import {Renderer, Timer, EventDispatcher, InputHandler} from "potree";
 import {geometries} from "potree";
 import {Potree} from "potree";
 import {MeasureTool} from "./interaction/measure.js";
 import * as ProgressiveLoader from "./modules/progressive_loader/ProgressiveLoader.js";
-import { 
-	renderPointsOctree, renderQuadsOctree
-} from "potree";
-import {dilate, EDL, hqs_normalize} from "potree";
+
 import * as TWEEN from "tween";
+import { fbo_blending as gaussianFbo } from "./modules/gaussians/GaussianSplats.js";
 
 let frame = 0;
 let lastFpsCount = 0;
@@ -27,6 +28,7 @@ let controls = null;
 let measure = null;
 let dbgImage = null;
 let inputHandler = null;
+let gaussNode = null;
 
 let dispatcher = new EventDispatcher();
 
@@ -469,7 +471,7 @@ function renderNotSoBasic(){
 
 	let screenbuffer = renderer.screenbuffer;
 	let fbo_source = screenbuffer;
-
+	
 	let fbo_0 = renderer.getFramebuffer("fbo intermediate 0");
 	let fbo_1 = renderer.getFramebuffer("fbo intermediate 1");
 	
@@ -592,7 +594,6 @@ function renderNotSoBasic(){
 				let isOctree = node.constructor.name === "PointCloudOctree";
 				let isGS = node.constructor.name === "GaussianSplats";
 				let isImages360 = node.constructor.name === "Images360";
-
 				if(hasRender && !isOctree && !isGS){
 					node.render(drawstate);
 				}
@@ -615,31 +616,65 @@ function renderNotSoBasic(){
 	}
 
 	{ // Render Gaussian Splats into their own render target, then compose with previously rendered stuff
-		let drawstate = {renderer, camera, renderables};
 
+		
+		let drawstate = {renderer, camera, renderables, dbgSphere};
+		
 		for(let [key, nodes] of renderables){
 			for(let node of nodes){
 				let isGS = node.constructor.name === "GaussianSplats";
-
 				if(isGS){
+					//I KNOW trashy workdaround q.q
+					gaussNode = node;
 					node.render(drawstate);
 				}
 			}
 		}
 	}
 
-	{ // HANDLE PICKING
+	
 
+	{ // HANDLE PICKING
 		let renderedObjects = Potree.state.renderedObjects;
+		
+		
 		
 		let mouse = inputHandler.mouse;
 		let searchWindow = 3;
 		let wh = searchWindow / 2;
+
+		//Just for the gaussians, exquisite picking c:===============
+		//Ok i know i just captured and changed the picking for regular
+		//Pointclouds. but i just adapted gaussians.wgsl so
+		//That the pixel being hovered, returns their VIEW-pos
+		//then, just use that
+		renderer.readPixels(gaussianFbo?.colorAttachments[1].texture,
+			mouse.x - wh, mouse.y - wh, searchWindow, searchWindow)
+			.then(buffer => {
+
+				let floatView = new Float32Array(buffer);
+				let x = floatView[0];
+				let y = floatView[1];
+				let z = floatView[2];
+
+				let position = new Vector3(x, y, z);
+
+				Potree.pickPosition.copy(position);
+				Potree.hoveredItem = {
+					type: gaussNode?.constructor.name + " Gaussian",
+					instance: gaussNode,
+					node: gaussNode,
+					position: position,
+					object: gaussNode,
+				}; 
+		});
+
+		//END GAUSSIAN PICKING ======================================
+
 		// console.log(mouse);
 		renderer.readPixels(fbo_source.colorAttachments[1].texture, mouse.x - wh, mouse.y - wh, searchWindow, searchWindow).then(buffer => {
 
 			let maxID = Math.max(...new Uint32Array(buffer));
-
 			if(maxID === 0){
 				return;
 			}

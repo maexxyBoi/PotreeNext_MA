@@ -29,15 +29,20 @@ struct VertexOut{
 	@builtin(position) position : vec4<f32>,
 	@location(1) @interpolate(linear) color : vec4<f32>,
 	@location(2) @interpolate(perspective) uv : vec2f,
+    @location(3) @interpolate(linear) pos : vec3<f32>, 
+
 };
 
 struct FragmentIn{
 	@location(1) @interpolate(linear) color : vec4<f32>,
 	@location(2) @interpolate(perspective) uv : vec2f,
+    @location(3) @interpolate(linear) pos : vec3<f32>, 
+
 };
 
 struct FragmentOut{
-	@location(0) color : vec4<f32>
+	@location(0) color : vec4<f32>,
+	@location(1) position : vec4<f32>,
 };
 
 // Adapted from glm mat3_cast: https://github.com/g-truc/glm/blob/2d4c4b4dd31fde06cfffad7915c2b3006402322f/glm/gtc/quaternion.inl#L47
@@ -193,10 +198,17 @@ fn main_vertex(vertex : VertexIn) -> VertexOut {
 		if(localVertexIndex == 5u) { vout.uv = vec2f(-1.0f,  1.0f);};
 
 	}
-	
-	vout.position = uniforms.proj * viewPos;
-	vout.color = a_color[splatIndex];
+		
+	//I need the correct position of the pixel for picking
+    let R = transpose(viewMat3);              // world-space rotation
+    let t = uniforms.view[3].xyz;            // view-space translation column
+    let camPos = -(R * t);                   // camera position in world space
+    let worldVertexPos = R * viewPos.xyz + camPos;
 
+    vout.position = uniforms.proj * viewPos;
+    vout.color = a_color[splatIndex];
+    vout.pos = worldVertexPos  // per-vertex world position on the quad
+	//worldPos.xyz
 	return vout;
 }
 
@@ -210,6 +222,9 @@ fn main_fragment(fragment : FragmentIn) -> FragmentOut {
 	var opacity = fragment.color.a * (1.0f - d);
 	fout.color = vec4f(fragment.color.xyz, opacity);
 
+	//This pos i need for accurate hovering-sphere-position (you'll get it eventually)
+    fout.position = vec4f(fragment.pos, 1.0f); 
+	
 	if(d > 1.0f) {
 		discard;
 	}

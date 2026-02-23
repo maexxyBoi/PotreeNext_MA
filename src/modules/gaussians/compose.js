@@ -1,41 +1,42 @@
 
 let shaderCode = `
-	struct Uniforms {
-		screenWidth: f32,
-		screenHeight: f32,
-	};
+    struct Uniforms {
+        screenWidth: f32,
+        screenHeight: f32,
+    };
 
-	@group(0) @binding(0) var<uniform> uniforms : Uniforms;
-	@group(0) @binding(1) var mySampler   : sampler;
-	@group(0) @binding(2) var myTexture   : texture_2d<f32>;
+    @group(0) @binding(0) var<uniform> uniforms : Uniforms;
+    @group(0) @binding(1) var mySampler   : sampler;
+    @group(0) @binding(2) var myTexture   : texture_2d<f32>;
 
-	@vertex
-	fn main_vs(@builtin(vertex_index) index : u32) -> @builtin(position) vec4<f32> {
+    struct VertexOut {
+        @builtin(position) position : vec4<f32>,
+        @location(0) uv : vec2<f32>,
+    };
 
-		var pos = vec4f(0.0f, 0.0f, 0.0f, 0.0f);
+    @vertex
+    fn main_vs(@builtin(vertex_index) index : u32) -> VertexOut {
+        var out : VertexOut;
 
-		if(index == 0u){ pos = vec4f(-1.0f, -1.0f, 0.0f, 1.0f); }
-		if(index == 1u){ pos = vec4f( 1.0f, -1.0f, 0.0f, 1.0f); }
-		if(index == 2u){ pos = vec4f( 1.0f,  1.0f, 0.0f, 1.0f); }
-		if(index == 3u){ pos = vec4f(-1.0f, -1.0f, 0.0f, 1.0f); }
-		if(index == 4u){ pos = vec4f( 1.0f,  1.0f, 0.0f, 1.0f); }
-		if(index == 5u){ pos = vec4f(-1.0f,  1.0f, 0.0f, 1.0f); }
-		
-		return pos;
-	}
+        if(index == 0u){ out.position = vec4f(-1.0f, -1.0f, 0.0f, 1.0f); out.uv = vec2f(0.0f, 1.0f); }
+        if(index == 1u){ out.position = vec4f( 1.0f, -1.0f, 0.0f, 1.0f); out.uv = vec2f(1.0f, 1.0f); }
+        if(index == 2u){ out.position = vec4f( 1.0f,  1.0f, 0.0f, 1.0f); out.uv = vec2f(1.0f, 0.0f); }
+        if(index == 3u){ out.position = vec4f(-1.0f, -1.0f, 0.0f, 1.0f); out.uv = vec2f(0.0f, 1.0f); }
+        if(index == 4u){ out.position = vec4f( 1.0f,  1.0f, 0.0f, 1.0f); out.uv = vec2f(1.0f, 0.0f); }
+        if(index == 5u){ out.position = vec4f(-1.0f,  1.0f, 0.0f, 1.0f); out.uv = vec2f(0.0f, 0.0f); }
+        
+        return out;
+    }
 
-	@fragment
-	fn main_fs(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
+    @fragment
+    fn main_fs(@builtin(position) pos: vec4<f32>) -> @location(0) vec4<f32> {
 
-		// Convert pixel coordinates to normalized UV coordinates [0, 1]
-		var uv = pos.xy / vec2f(uniforms.screenWidth, uniforms.screenHeight);
-		// Flip Y for proper texture orientation
-		//uv.y = 1.0 - uv.y;
+        var uv = pos.xy / vec2f(uniforms.screenWidth, uniforms.screenHeight);
 
-		var sourceColor = textureSample(myTexture, mySampler, uv);
+        var sourceColor = textureSample(myTexture, mySampler, uv);
 
-		return sourceColor;
-	}
+        return sourceColor;
+    }
 `;
 
 let initialized = false;
@@ -124,14 +125,14 @@ export function compose(renderer, source, target){
 	]);
 	renderer.device.queue.writeBuffer(composeUniformBuffer, 0, uniformsData);
 
-	let bindGroup = renderer.device.createBindGroup({
-		layout: pipeline.getBindGroupLayout(0),
-		entries: [
-			{binding: 0, resource: {buffer: composeUniformBuffer}},
-			{binding: 1, resource: composeSampler},
-			{binding: 2, resource: source.colorAttachments[0].texture.createView()},
-		],
-	});
+    let bindGroup = renderer.device.createBindGroup({
+        layout: pipeline.getBindGroupLayout(0),
+        entries: [
+            {binding: 0, resource: {buffer: composeUniformBuffer}},
+            {binding: 1, resource: composeSampler},
+            {binding: 2, resource: source.colorAttachments[0].texture.createView()},
+        ],
+    });
 
 
 	passEncoder.setPipeline(pipeline);

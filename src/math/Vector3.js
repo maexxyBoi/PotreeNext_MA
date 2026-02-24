@@ -167,6 +167,25 @@ export class Vector3{
 		}
 	}
 
+	maxVal(){
+		return Math.max(this.x, this.y, this.z);
+	}
+
+	setMaxVal(val){
+		if(this.x == this.maxVal())
+		{
+			this.x = val;
+		}
+		if(this.y == this.maxVal())
+		{
+			this.y = val;
+		}
+		if(this.z == this.maxVal())
+		{
+			this.z = val;
+		}
+	}
+
 	toArray(){
 		return [this.x, this.y, this.z];
 	}

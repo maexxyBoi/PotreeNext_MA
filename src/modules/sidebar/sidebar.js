@@ -250,7 +250,7 @@ function calculateInnerVolume(id, elDropdown)
 
 	if (option === sliceString){
 		console.log(sliceString)
-		concaveSlicing(newBounds, pointClouds)
+		concaveSlicing(newBounds, pointClouds, measure)
 	}
 	if (option === octreesString){
 		console.log(octreesString)
@@ -264,23 +264,75 @@ function calculateInnerVolume(id, elDropdown)
 	}
 }
 
-function concaveSlicing(newBounds, pointClouds){
+function concaveSlicing(newBounds, pointClouds, measure){
 
 	//test
 	console.log(newBounds);
+	//have size of measure box
+	let length = newBounds.max.clone().sub(newBounds.min)
+	//determine longest axis along which to slice
+	let longest = length.maxVal();
+
 	let sliceAmount = 8; //FIXME change this to changeable
-	let slices = [];
-	let intervalSpace = ( newBounds.max - newBounds.min ) / 8;//FIXME CHANGE ARITHMETICS TO VECTOR3EMTHOD
-	//slice along longes axis
 	
-	for (let i = 0; i < sliceAmount; i++){
-		slices.push(new Box3(newBounds.min.clone() + i * intervalSpace,
-					(newBounds.max + (i+1) * intervalSpace )));
-	}//FIXME CHANGE ARITHMETICS TO VECTOR3EMTHOD//FIXME CHANGE ARITHMETICS TO VECTOR3EMTHOD//FIXME CHANGE ARITHMETICS TO VECTOR3EMTHOD
+	let slices = [];
+
+	for (let i = 0, j = sliceAmount-1; i < sliceAmount; i++, j--){
+
+		let newMin = newBounds.min.clone();
+		let newMax = newBounds.max.clone();
+
+		if(longest == length.x) {
+			slices.push(
+				sliceX( i, j, newMin, newMax, length, sliceAmount));
+		}
+		if(longest == length.y) {
+			slices.push(
+				sliceY( i, j, newMin, newMax, length, sliceAmount));
+		}
+		if(longest == length.z) {
+			slices.push(
+				sliceZ( i, j, newMin, newMax, length, sliceAmount));
+		}
+	}
+	slices.forEach(slice => {
+		//for testing ONCE MORE
+		measure.sliceBoxes.push(slice.min.clone().add(slice.max).divideScalar(2))
+		measure.sliceBoxes.push(slice.size(slice))
+	});
 	console.log(slices);
+	//let hulledSlices = concaveHull(points);
 
 }
 
+function sliceX(i,j, min, max, length, sliceAmount)
+{
+	min.x += (length.x * (i/sliceAmount));
+	max.x -= (length.x * (j/sliceAmount))
+	return new Box3(
+		min,
+		max
+		);
+}
+function sliceY(i,j, min, max, length, sliceAmount)
+{
+	min.y += (length.y * (i/sliceAmount));
+	max.y -= (length.y * (j/sliceAmount))
+	return new Box3(
+		min,
+		max
+		);
+}
+function sliceZ(i,j, min, max, length, sliceAmount)
+{
+	min.z += (length.z * (i/sliceAmount));
+	max.z -= (length.z * (j/sliceAmount))
+	return new Box3(
+		min,
+		max
+		);
+}
+//==============================================OCTREE CALC
 function octreeVolume(newBounds, pointClouds, measure){
 	let results = {}
 	let originalLeaves = []
@@ -299,9 +351,6 @@ function octreeVolume(newBounds, pointClouds, measure){
 	});
 	let endtime = performance.now();
 	console.log("Volume: ", results, ". Time taken: ", endtime - starttime, "ms")
-}
-function integrationVolume(newBounds, splats){
-	getSplatsAndIntegrate(newBounds, splats)
 }
 
 function calcBounds(measure) {
@@ -352,10 +401,6 @@ function recGetLeavesForVol (newBounds, octreeNode, measure, originalLeaves, res
 function recCalcVol (node, originalLeaves, measure, results)
 {
 
-	//for testing ONCE MORE
-	//measure.newOctNodeBBs.push(node.boundingBox.min)
-	//measure.newOctNodeBBs.push(node.boundingBox.max)
-
 	let containsContent = originalLeaves.some( leaf => {
 		return node.boundingBox.intersectsBox(leaf.boundingBox)
 		||
@@ -374,7 +419,7 @@ function recCalcVol (node, originalLeaves, measure, results)
 		else {
 
 	 		let dims = new Vector3(0,0,0)
-			dims = node.boundingBox.getSize(dims) //idk, again :D
+			dims = node.boundingBox.size(dims) //idk, again :D
 			let vol = Math.abs(dims.x) * Math.abs(dims.y) * Math.abs(dims.z)
 			results[originalLeaves[0].octree.name] += vol
 	//for testing ONCE MORE

@@ -109,6 +109,7 @@ export class InnerVolMeasure extends Measure{
 		this.measureOctBoxes = []
 		this.measureOctTightBoxes = []
 		this.newOctNodeBBs = []
+		this.sliceBoxes = []
 	}
 
 	addMarker(position){
@@ -342,16 +343,33 @@ export class MeasureTool{
 	drawCalcBoxes(measure){
 		for (let i = 0; i < measure.measureOctBoxes.length; i+=2 )
 		{
-			this.renderer.drawBox(measure.measureOctBoxes[i], measure.measureOctBoxes[i+1], new Vector3(255,0,0))
+			this.renderer.drawBox(
+				measure.measureOctBoxes[i],
+				 measure.measureOctBoxes[i+1],
+				  new Vector3(255,0,0))
 		}/*
 		for (let i = 0; i < measure.measureOctTightBoxes.length; i+=2 )
 		{
-			this.renderer.drawBox(measure.measureOctTightBoxes[i], measure.measureOctTightBoxes[i+1], new Vector3(0,0,255))
+			this.renderer.drawBox(
+			measure.measureOctTightBoxes[i],
+			 measure.measureOctTightBoxes[i+1],
+			  new Vector3(0,0,255))
 		}*/
 		for (let i = 0; i < measure.newOctNodeBBs.length; i+=2 )
 		{
-			this.renderer.drawBox(measure.newOctNodeBBs[i], measure.newOctNodeBBs[i+1], new Vector3(0,0,255))
+			this.renderer.drawBox(
+				measure.newOctNodeBBs[i],
+				 measure.newOctNodeBBs[i+1],
+				  new Vector3(0,0,255))
 		}
+		for (let i = 0; i < measure.sliceBoxes.length; i+=2 )
+		{
+			this.renderer.drawBox(
+				measure.sliceBoxes[i],
+				 measure.sliceBoxes[i+1],
+				  new Vector3(255,0,255))
+		}
+
 	}
 
 };

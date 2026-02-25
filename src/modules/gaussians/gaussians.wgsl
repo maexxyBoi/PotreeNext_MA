@@ -95,7 +95,7 @@ fn main_vertex(vertex : VertexIn) -> VertexOut {
 		a_positions[3u * splatIndex + 0], 
 		a_positions[3u * splatIndex + 1], 
 		a_positions[3u * splatIndex + 2], 
-		.01f);
+		1.0f);
 	var worldPos = uniforms.world * splatPos;
 	var viewPos = uniforms.view * worldPos;
 	var ndc = uniforms.proj * viewPos;
@@ -199,15 +199,23 @@ fn main_vertex(vertex : VertexIn) -> VertexOut {
 
 	}
 		
-	//I need the correct position of the pixel for picking
-    let R = transpose(viewMat3);              // world-space rotation
-    let t = uniforms.view[3].xyz;            // view-space translation column
-    let camPos = -(R * t);                   // camera position in world space
-    let worldVertexPos = R * viewPos.xyz + camPos;
+    // Build 3x3 rotation from the first three columns of the view matrix
+    let R = mat3x3f(
+        uniforms.view[0].xyz,
+        uniforms.view[1].xyz,
+        uniforms.view[2].xyz,
+    );
+
+    // Translation is the last column
+    let T = uniforms.view[3].xyz;
+
+    // Convert final per-vertex VIEW position back to WORLD space:
+    // world = R^T * (view - T)
+    let worldVertexPos = transpose(R) * (viewPos.xyz - T);
 
     vout.position = uniforms.proj * viewPos;
     vout.color = a_color[splatIndex];
-    vout.pos = worldVertexPos;  // per-vertex world position on the quad
+    vout.pos = worldVertexPos;// per-vertex WORLD position for picking
 	//worldPos.xyz
 	return vout;
 }

@@ -316,9 +316,6 @@ export class GaussianSplats extends SceneNode{
 		let {renderer, camera, renderables} = drawstate;
 		let {device} = renderer;
 
-		console.log("GaussianSplats render called, numSplats:", this.numSplats, "initialized:", initialized, "pipeline ready:", !!pipeline);
-		console.log("fbo format:", fbo_blending?.colorAttachments?.[0]?.descriptor?.format);
-
 		init(renderer);
 		if(!initialized) {
 			console.warn("GaussianSplats not initialized, skipping render");
@@ -326,8 +323,6 @@ export class GaussianSplats extends SceneNode{
 		}
 
 		fbo_blending.setSize(...renderer.screenbuffer.size);
-		console.log("After setSize, fbo texture format:", fbo_blending.colorAttachments[0].texture.format);
-		console.log("After setSize, fbo descriptor format:", fbo_blending.colorAttachments[0].descriptor.format);
 
 		// track GPU validation errors for this frame
 		device.pushErrorScope("validation");

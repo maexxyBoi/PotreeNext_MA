@@ -267,7 +267,7 @@ function calculateInnerVolume(id, elDropdown)
 function concaveSlicing(newBounds, pointClouds, measure){
 
 	//test
-	console.log(newBounds);
+	//console.log(newBounds);
 	//have size of measure box
 	let length = newBounds.max.clone().sub(newBounds.min)
 	//determine longest axis along which to slice
@@ -281,57 +281,70 @@ function concaveSlicing(newBounds, pointClouds, measure){
 
 		let newMin = newBounds.min.clone();
 		let newMax = newBounds.max.clone();
-
+		let newValues = [];
+		//since i cant really just get the correct dim of the logest axis
+		//of the DISTANCE (bcs that is what counts, not the actual size of the box), i have to do this weird stuff
+		//i check for which dim it is.
 		if(longest == length.x) {
-			slices.push(
-				sliceX( i, j, newMin, newMax, length, sliceAmount));
+			newValues = slice( i, j, newMin.x, newMax.x, length.x, sliceAmount);
+			newMin.x = newValues[0]
+			newMax.x = newValues[1]
 		}
 		if(longest == length.y) {
-			slices.push(
-				sliceY( i, j, newMin, newMax, length, sliceAmount));
+			newValues = slice( i, j, newMin.y, newMax.y, length.y, sliceAmount);
+			newMin.y = newValues[0]
+			newMax.y = newValues[1]
 		}
 		if(longest == length.z) {
-			slices.push(
-				sliceZ( i, j, newMin, newMax, length, sliceAmount));
+			newValues = slice( i, j, newMin.z, newMax.z, length.z, sliceAmount);
+			newMin.z = newValues[0]
+			newMax.z = newValues[1]
 		}
+		slices.push(new Box3(newMin, newMax))
 	}
+
 	slices.forEach(slice => {
 		//for testing ONCE MORE
 		measure.sliceBoxes.push(slice.min.clone().add(slice.max).divideScalar(2))
 		measure.sliceBoxes.push(slice.size(slice))
 	});
-	console.log(slices);
-	//let hulledSlices = concaveHull(points);
+	//test
+	//console.log(slices);
+	let pointSets = extractPoints(slices);
+	let hulledSlices = concaveHull(pointSets);
 
 }
 
-function sliceX(i,j, min, max, length, sliceAmount)
+function slice(i,j, min, max, length, sliceAmount)
 {
-	min.x += (length.x * (i/sliceAmount));
-	max.x -= (length.x * (j/sliceAmount))
-	return new Box3(
-		min,
-		max
-		);
+	min += (length * (i/sliceAmount));
+	max -= (length * (j/sliceAmount))
+	return [min, max];
 }
-function sliceY(i,j, min, max, length, sliceAmount)
+
+function extractPoints(slices)
 {
-	min.y += (length.y * (i/sliceAmount));
-	max.y -= (length.y * (j/sliceAmount))
-	return new Box3(
-		min,
-		max
-		);
+	let pointSets = [];
+
+	slices.forEach(slice => {
+		
+	});
+
+	//extract all positional data of points within a slice
+	return pointSets;
 }
-function sliceZ(i,j, min, max, length, sliceAmount)
+
+function concaveHull(pointSets)
 {
-	min.z += (length.z * (i/sliceAmount));
-	max.z -= (length.z * (j/sliceAmount))
-	return new Box3(
-		min,
-		max
-		);
+	let hulls = [];
+
+	pointSets.forEach(pointSet => {
+	
+	});
+	//for each set of points that are in a slice, calculate the concave hull
+	return hulls;
 }
+
 //==============================================OCTREE CALC
 function octreeVolume(newBounds, pointClouds, measure){
 	let results = {}

@@ -10,6 +10,27 @@ import { Measure, sliceString, octreesString, meshString } from "../../interacti
 import { GaussianSplats, PointCloudOctree, Vector3, Box3 } from "../../Potree.js";
 import { simpleOctree, simpleOctreeNode } from "../../potree/octree/simpleOctree.js";
 
+export const debugColors = [ //16 colors, each neighbor i tried to make different
+	new Vector3(47, 79, 79),//darkslategray
+	new Vector3(255, 192, 203),//pink
+	new Vector3(165, 42, 42),//brown
+	new Vector3(255, 20, 147),//deeppink
+	new Vector3(0, 100, 0),//darkgreen
+	new Vector3(100, 149, 237),//cornflowerblue
+	new Vector3(0, 0, 128),//navy
+	new Vector3(240, 230, 140),//khaki
+	new Vector3(255, 0, 0),//red
+	new Vector3(255, 0, 255),//magenta
+	new Vector3(255, 165, 0),//orange
+	new Vector3(0, 0, 255),//blue
+	new Vector3(255, 255, 0),//yellow
+	new Vector3(0, 255, 255),//cyan
+	new Vector3(0, 255, 0),	//lime
+	new Vector3(0, 250, 154)//mediumspringgreen
+];
+export const debugPickedPoints = [];
+
+
 let sidebar = null;
 let dir = new URL(import.meta.url + "/../").href;
 let sidebarWidth = "30em";
@@ -310,8 +331,8 @@ function concaveSlicing(newBounds, pointClouds, measure){
 	});
 	//test
 	//console.log(slices);
-	let pointSets = extractPoints(slices);
-	let hulledSlices = concaveHull(pointSets);
+	let pointSets = extractPoints(slices, pointClouds);
+	let hulledSlices = alphaShape(pointSets);
 
 }
 
@@ -322,24 +343,62 @@ function slice(i,j, min, max, length, sliceAmount)
 	return [min, max];
 }
 
-function extractPoints(slices)
+function extractPoints(slices, pointClouds)
 {
+    debugPickedPoints.length = 0; // clear previous
 	let pointSets = [];
-
+	//FIXME look if nested loop can be avoided, but since there wont be
+	//a lot of pointclouds parallel
+	let i = 0;
 	slices.forEach(slice => {
-		
+		//FIXME debugging----------------------------------------------------------
+		let currentDebugColor = debugColors[i++];
+		let points = [];
+		pointClouds.forEach(pc => {
+			//FIXME for now i ' ll only take the points of the root
+			for (let i = 0; i < pc.root.geometry.numElements; i++){
+				let point = pc.root.getPoint(i);
+				if(checkIfInSlice(point.position, slice)){
+					points.push(point.position.clone())
+                    //FIXME DEBUGGING store for debug drawing
+                    debugPickedPoints.push({
+                        position: point.position.clone(),
+                        color: currentDebugColor,
+                    });
+				}
+			}
+		});
+		pointSets.push(points);
 	});
 
 	//extract all positional data of points within a slice
 	return pointSets;
 }
 
-function concaveHull(pointSets)
+function checkIfInSlice(pos, slice)
+{
+    return (
+        pos.x >= slice.min.x && pos.x <= slice.max.x &&
+        pos.y >= slice.min.y && pos.y <= slice.max.y &&
+        pos.z >= slice.min.z && pos.z <= slice.max.z
+    );
+}
+
+//On the frontend it is called concave hull bcs usually, we want
+//a concave hull for volume comp even tho i use an alpha shape lib for flexibility
+function alphaShape(pointSets)
 {
 	let hulls = [];
 
-	pointSets.forEach(pointSet => {
-	
+	pointSets.forEach(async pointSet => {
+		// so i could either do this with geos
+		// or do it myself, then i'd use wgsl for performance
+		//either one sounds like work, bcs i dont know geos
+		//need to do some research
+		//FIXME CHANGE DIR
+		let alpha = false;
+		let shape = await fetchAlphaShape(pointSet, alpha)
+		console.log(shape)
 	});
 	//for each set of points that are in a slice, calculate the concave hull
 	return hulls;
@@ -393,11 +452,11 @@ function recGetLeavesForVol (newBounds, octreeNode, measure, originalLeaves, res
 		let dims = new Vector3(0,0,0)
 		dims = octreeNode.boundingBox.getSize(dims) //idk
 		let vol = Math.abs(dims.x) * Math.abs(dims.y) * Math.abs(dims.z)
-		//test
+		//test---------------------------------------------------------
 		//potree.renderer.drawBox(octreeNode.boundingBox.min, dims.divideScalar(2), new Vector3(255,0,0))
 		measure.measureOctBoxes.push(octreeNode.boundingBox.min.add(octreeNode.boundingBox.max).divideScalar(2))
 		measure.measureOctBoxes.push(dims)
-		//test end
+		//test end-----------------------------------------------------------------
 		originalLeaves.push(octreeNode)
 		results[octreeNode.octree.name+"orig"] += vol
 		//console.log(octreeNode.numElements)
@@ -435,14 +494,32 @@ function recCalcVol (node, originalLeaves, measure, results)
 			dims = node.boundingBox.size(dims) //idk, again :D
 			let vol = Math.abs(dims.x) * Math.abs(dims.y) * Math.abs(dims.z)
 			results[originalLeaves[0].octree.name] += vol
-	//for testing ONCE MORE
+	//FIXME for testing ONCE MORE------------------------------------------------
 			measure.newOctNodeBBs.push(node.boundingBox.min.add(node.boundingBox.max).divideScalar(2))
 			measure.newOctNodeBBs.push(dims)
 		}
 	}
 }
+function meshVol(newBounds, splats) {
+}
 
-//FIXME TEST 
+async function fetchAlphaShape(pointSet, alpha) {
+	if (!alpha) {
+		alpha = 10;
+	}
+    const res = await fetch("http://localhost:8000/alpha3d", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+			points: pointSet.map(p => ([ p.x, p.y, p.z ])),
+            //points: pointSet.map(p => ({ x: p.x, y: p.y, z: p.z })),
+            alpha,
+        }),
+    });
+    return await res.json();
+}
+
+//FIXME TEST ==========================================
 function recDrawingBBTest (newBounds, octreeNode) {
 	octreeNode.children.forEach(element => {
 		if (element && element.boundingBox.intersectsBox(newBounds)){
@@ -453,5 +530,5 @@ function recDrawingBBTest (newBounds, octreeNode) {
 	});
 }
 
-function meshVol(newBounds, splats) {
-}
+//DEBUG METHODS END
+//===========================================================

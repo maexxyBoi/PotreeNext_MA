@@ -1,18 +1,17 @@
 
-import { 
-	renderPointsOctree, renderQuadsOctree, Vector3, Ray
-} from "potree";
 import {
 	Scene, SceneNode, Camera, OrbitControls, PotreeControls, StationaryControls, Mesh, RenderTarget,
-	PointCloudOctree, dilate, EDL, hqs_normalize
-} from "potree";
+	PointCloudOctree, dilate, EDL, hqs_normalize, renderPointsOctree, renderQuadsOctree, Vector3, Ray
+	}
+from "potree";
 
 import {Renderer, Timer, EventDispatcher, InputHandler} from "potree";
 import {geometries} from "potree";
 import {Potree} from "potree";
 import {MeasureTool} from "./interaction/measure.js";
 import * as ProgressiveLoader from "./modules/progressive_loader/ProgressiveLoader.js";
-
+import { debugPickedPoints } from "./modules/sidebar/sidebar.js";
+import { Vector4 } from "./Potree.js";
 import * as TWEEN from "tween";
 import { fbo_blending as gaussianFbo } from "./modules/gaussians/GaussianSplats.js";
 
@@ -977,6 +976,31 @@ function renderNotSoBasic(){
 
 		});
 
+	}
+
+	//FIXME DEBUGGING----------------------------------------------------------
+	const camPos = controls.getPosition();
+	const MAX_DEBUG_SPHERES = 10000; // tweak as needed
+	const n = Math.min(debugPickedPoints.length, MAX_DEBUG_SPHERES);
+/* 	console.log("debugPickedPoints:", debugPickedPoints.length);
+ */
+	for (let i = 0; i < n; i++) {
+		const { position, color } = debugPickedPoints[i];
+		const depth = camPos.distanceTo(position);
+		const radius = depth / 300; // tweak size
+
+		renderer.drawSphere(
+			position,
+			radius,
+			{
+				color: new Vector4(
+					color.x / 255,
+					color.y / 255,
+					color.z / 255,
+					1.0
+				),
+			}
+		);
 	}
 
 }

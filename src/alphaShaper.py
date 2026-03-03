@@ -1,21 +1,10 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-
-from descartes import PolygonPatch
 from pydantic import BaseModel
 from typing import List
-
-import pandas as pd
-import matplotlib.pyplot as plt
-import alphashape
-import numpy as np
+import subprocess, json, os
 
 app = FastAPI()
-
-origins = [
-    "http://127.0.0.1:8081",
-    "http://localhost:8081",
-]
 
 app.add_middleware(
     CORSMiddleware,
@@ -25,22 +14,40 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-"""class Point3D(BaseModel):
+class Point3D(BaseModel):
     x: float
     y: float
     z: float
-"""
+
 class HullRequest(BaseModel):
-    points: List[List[float]]
-    alpha: float | None = None
+    points: List[Point3D]
+    alpha: float
 
+ALPHA_EXE_PATH = os.path.join(
+    os.path.dirname(__file__),
+    "CAlphaShapes",
+    "build",
+    "Release",
+    "alphaShaper.exe",
+)
 
-@app.post("/alpha3d")
-def alpha3d(req: HullRequest):
-	print(req)
-	#alpha_shape = alphashape.alphashape(req.points, req.alpha)
-	#alpha_shape.show()
-	#pts = np.array([[p.x, p.y, p.z] for p in req.points])
-	#hull = alphashape.alphashape(pts, req.alpha)
-    # TODO: convert hull to vertices/faces
-	return {}
+@app.post("/alpha3d_cgal")
+def alpha3d_cgal(req: HullRequest):
+    payload = {
+        "points": [p.model_dump() for p in req.points],
+        "alpha": req.alpha,
+    }
+
+    proc = subprocess.Popen(
+        [ALPHA_EXE_PATH],
+        stdin=subprocess.PIPE,
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+        text=True,
+    )
+    out, err = proc.communicate(json.dumps(payload))
+
+    if proc.returncode != 0:
+        return {"error": err}
+
+    return json.loads(out)

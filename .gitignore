@@ -115,3 +115,4 @@ resources/pointclouds/wien_innenstadt/metadata.json
 resources/pointclouds/wien_innenstadt/octree.bin
 .vscode/settings.json
 PGSR-main/
+src/CAlphaShapes/build

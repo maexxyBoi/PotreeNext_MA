@@ -507,17 +507,20 @@ async function fetchAlphaShape(pointSet, alpha) {
 	if (!alpha) {
 		alpha = 10;
 	}
-    const res = await fetch("http://localhost:8000/alpha3d", {
+    const res = await fetch("http://localhost:8000/alpha3d_cgal", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-			points: pointSet.map(p => ([ p.x, p.y, p.z ])),
-            //points: pointSet.map(p => ({ x: p.x, y: p.y, z: p.z })),
+            points: pointSet.map(p => ({ x: p.x, y: p.y, z: p.z })),
             alpha,
         }),
     });
-    return await res.json();
+
+    const data = await res.json();
+    console.log("CGAL stub result:", data);
+    return data;
 }
+
 
 //FIXME TEST ==========================================
 function recDrawingBBTest (newBounds, octreeNode) {

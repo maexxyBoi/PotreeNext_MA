@@ -10,10 +10,10 @@ import {geometries} from "potree";
 import {Potree} from "potree";
 import {MeasureTool} from "./interaction/measure.js";
 import * as ProgressiveLoader from "./modules/progressive_loader/ProgressiveLoader.js";
-import { debugPickedPoints } from "./modules/sidebar/sidebar.js";
 import { Vector4 } from "./Potree.js";
 import * as TWEEN from "tween";
 import { fbo_blending as gaussianFbo } from "./modules/gaussians/GaussianSplats.js";
+import { debugPickedPoints, debugCgalTriangles } from "./modules/sidebar/sidebar.js";
 
 let frame = 0;
 let lastFpsCount = 0;
@@ -1002,7 +1002,14 @@ function renderNotSoBasic(){
 			}
 		);
 	}
-
+    // draw CGAL triangles as wireframe
+    const triColor = new Vector3(0, 255, 0); // bright green
+    for (const tri of debugCgalTriangles) {
+        const { a, b, c } = tri;
+        renderer.drawLine(a, b, triColor);
+        renderer.drawLine(b, c, triColor);
+        renderer.drawLine(c, a, triColor);
+    }
 }
 
 

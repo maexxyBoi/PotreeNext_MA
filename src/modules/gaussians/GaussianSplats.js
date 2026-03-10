@@ -16,9 +16,9 @@ let splatSortKeys = null;
 let splatSortValues = null;
 let pipeline_depth = null;
 
-const PROGRESSIVE_BUDGET_INIT = 10000;     // start with 10k splats
-const PROGRESSIVE_BUDGET_INCREASE = 5000;  // add 5k each frame up to max
-const PROGRESSIVE_BUDGET_MAX = 500000;     // cap at 500k (show all splats)
+const PROGRESSIVE_BUDGET_INIT = 100000;     // start with 100k splats
+const PROGRESSIVE_BUDGET_INCREASE = 50000;  // add 50k each frame up to max
+const PROGRESSIVE_BUDGET_MAX = 5000000;     // cap at 5M (show all splats)
 
 let _progressiveSplatBudget = PROGRESSIVE_BUDGET_INIT;
 let _lastCameraMatrix = new Matrix4();

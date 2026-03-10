@@ -121,16 +121,32 @@ export class InnerVolMeasure extends Measure{
 		let id = this.measureID
 		if(!this.innerVolume) {
 			html +=
-			`<div class="innerMeasureBlock" data-measureid="${id}">
-				<select id="innerOption">
-					<option value="Concave Hull Slicing">Pointcloud: ${sliceString}</option>
-					<option value="Octrees">Pointcloud: ${octreesString}</option>
-					<option value="Mesh Extraction Volume">Gaussians: ${meshString}</option>
-				</select>
-				<br></br>
-				<button id="innerCalc">Calculate Volume</button>
-			</div>
-			` 
+            `<div class="innerMeasureBlock" data-measureid="${id}">
+                <select id="innerOption"
+                    onchange="
+                        const cont = this.parentNode.querySelector('.concave-ground-options');
+                        if (cont) {
+                            cont.style.display = (this.value === '${sliceString}') ? 'block' : 'none';
+                        }
+                    "
+                >
+                    <option value="${octreesString}">Pointcloud: ${octreesString}</option>
+                    <option value="${sliceString}">Pointcloud: ${sliceString}</option>
+                    <option value="${meshString}">Gaussians: ${meshString}</option>
+                </select>
+
+                <!-- only shown when Concave Hull Slicing is selected -->
+                <div class="concave-ground-options" style="display: none; margin-top: 4px;">
+                    <label style="display:flex;align-items:center;gap:4px;cursor:pointer;">
+                        <input type="checkbox" id="innerConcaveGround">
+                        <span>Insert ground floor at bottom of measure box</span>
+                    </label>
+                </div>
+
+                <br></br>
+                <button id="innerCalc">Calculate Volume</button>
+            </div>
+            `
 		}
 		else {
 			html += `
@@ -319,7 +335,7 @@ export class MeasureTool{
 			let pos = measure.markers[0]
 			let col = new Vector3(0, 255, 0, 100)
 			this.drawBBTest()
-			this.renderer.drawBox(pos, measure.size, col)
+			//this.renderer.drawBox(pos, measure.size, col)
 		}
 	}
 	drawBBTest(){
@@ -347,14 +363,14 @@ export class MeasureTool{
 				measure.measureOctBoxes[i],
 				 measure.measureOctBoxes[i+1],
 				  new Vector3(255,0,0))
-		}/*
+		}
 		for (let i = 0; i < measure.measureOctTightBoxes.length; i+=2 )
 		{
 			this.renderer.drawBox(
 			measure.measureOctTightBoxes[i],
 			 measure.measureOctTightBoxes[i+1],
 			  new Vector3(0,0,255))
-		}*/
+		}
 		for (let i = 0; i < measure.newOctNodeBBs.length; i+=2 )
 		{
 			this.renderer.drawBox(
@@ -364,11 +380,11 @@ export class MeasureTool{
 		}
 		for (let i = 0; i < measure.sliceBoxes.length; i+=2 )
 		{
-			this.renderer.drawBox(
+/* 			this.renderer.drawBox(
 				measure.sliceBoxes[i],
 				 measure.sliceBoxes[i+1],
 				  new Vector3(255,0,255))
-		}
+ */		}
 
 	}
 

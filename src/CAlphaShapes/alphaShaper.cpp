@@ -1,10 +1,33 @@
+//// filepath: l:\PotreeRep\next\nextMA\PotreeNext_MA\src\CAlphaShapes\alphaShaper.cpp
 #include <iostream>
 #include <vector>
 #include <string>
+#include <iterator>
 
-#include <nlohmann/json.hpp>  // from vcpkg: nlohmann-json
+#include <nlohmann/json.hpp>
+
+#include <CGAL/Exact_predicates_inexact_constructions_kernel.h>
+#include <CGAL/Alpha_shape_3.h>
+#include <CGAL/Alpha_shape_vertex_base_3.h>
+#include <CGAL/Alpha_shape_cell_base_3.h>
+#include <CGAL/Triangulation_vertex_base_3.h>
+#include <CGAL/Triangulation_cell_base_3.h>
+#include <CGAL/Triangulation_data_structure_3.h>
+#include <CGAL/Delaunay_triangulation_3.h>
 
 using json = nlohmann::json;
+
+// kernel
+typedef CGAL::Exact_predicates_inexact_constructions_kernel K;
+typedef K::Point_3                                         Point;
+
+// alpha-shape aware triangulation
+typedef CGAL::Alpha_shape_vertex_base_3<K>                 AsVb;
+typedef CGAL::Alpha_shape_cell_base_3<K>                   AsCb;
+typedef CGAL::Triangulation_data_structure_3<AsVb, AsCb>   Tds;
+typedef CGAL::Delaunay_triangulation_3<K, Tds>             Dt;
+typedef CGAL::Alpha_shape_3<Dt>                            Alpha_shape_3;
+typedef Alpha_shape_3::Facet                               Facet;
 
 int main() {
     json in;
@@ -15,10 +38,103 @@ int main() {
         return 1;
     }
 
-    // later: compute CGAL alpha shape here
+    if (!in.contains("points") || !in["points"].is_array()) {
+        std::cerr << "Input JSON missing 'points' array\n";
+        return 1;
+    }
+
+    double alpha = 0.0;
+    if (in.contains("alpha")) {
+        alpha = in["alpha"].get<double>();
+    }
+
+    std::vector<Point> pts;
+    pts.reserve(in["points"].size());
+    double cx = 0.0, cy = 0.0, cz = 0.0; // for centroid, i need them later for integration
+    for (const auto& p : in["points"]) {
+        double x = p.at("x").get<double>();
+        double y = p.at("y").get<double>();
+        double z = p.at("z").get<double>();
+        pts.emplace_back(x, y, z);
+        cx += x; cy += y; cz += z;
+    }
+
     json out;
-    out["received_points"] = in["points"].size();
-    out["alpha"] = in["alpha"];
+    out["num_points"] = pts.size();
+
+    if (pts.size() < 4) {
+        out["triangles"] = json::array();
+        out["used_alpha"] = alpha;
+        out["num_triangles"] = 0;
+        out["volume"] = 0.0;
+        std::cout << out.dump();
+        return 0;
+    }
+
+    cx /= pts.size();
+    cy /= pts.size();
+    cz /= pts.size();
+    Point ref(cx, cy, cz);
+
+    // Build alpha shape without fixed alpha first
+    Alpha_shape_3 A(pts.begin(), pts.end(), Alpha_shape_3::GENERAL);
+
+    // Choose alpha:
+    // - if user-provided alpha > 0, try that
+    // - otherwise, pick a middle alpha from CGAL's alpha spectrum
+    if (alpha > 0.0) {
+        A.set_alpha(alpha);
+    } else if (A.number_of_alphas() > 0) {
+        std::size_t n = A.number_of_alphas();
+        auto it = A.alpha_begin();
+        std::advance(it, n / 2); // middle alpha
+        A.set_alpha(*it);
+        alpha = *it;
+    }
+
+    out["used_alpha"] = alpha;
+
+    json triangles = json::array();
+    double volume = 0.0;
+
+    for (auto it = A.alpha_shape_facets_begin();
+         it != A.alpha_shape_facets_end(); ++it) {
+
+        Facet f = *it;
+        Alpha_shape_3::Cell_handle cell = f.first;
+        int i = f.second;
+
+        int ids[3];
+        int k = 0;
+        for (int v = 0; v < 4; ++v) {
+            if (v == i) continue;
+            ids[k++] = v;
+        }
+
+        Point p0 = cell->vertex(ids[0])->point();
+        Point p1 = cell->vertex(ids[1])->point();
+        Point p2 = cell->vertex(ids[2])->point();
+
+        // accumulate volume via tetrahedron (ref, p0, p1, p2)
+        K::Vector_3 v0 = p0 - ref;
+        K::Vector_3 v1 = p1 - ref;
+        K::Vector_3 v2 = p2 - ref;
+        K::Vector_3 cp = CGAL::cross_product(v1, v2);
+        double vTet = CGAL::to_double(v0 * cp) / 6.0;
+        volume += vTet;
+
+        json tri = json::array();
+        tri.push_back({ {"x", p0.x()}, {"y", p0.y()}, {"z", p0.z()} });
+        tri.push_back({ {"x", p1.x()}, {"y", p1.y()}, {"z", p1.z()} });
+        tri.push_back({ {"x", p2.x()}, {"y", p2.y()}, {"z", p2.z()} });
+
+        triangles.push_back(tri);
+    }
+
+    out["num_triangles"] = triangles.size();
+    out["triangles"] = triangles;
+    out["volume"] = std::abs(volume); // alpha-shape enclosed volume
+
 
     std::cout << out.dump();
     return 0;

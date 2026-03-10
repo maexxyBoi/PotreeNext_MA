@@ -29,7 +29,7 @@ export const debugColors = [ //16 colors, each neighbor i tried to make differen
 	new Vector3(0, 250, 154)//mediumspringgreen
 ];
 export const debugPickedPoints = [];
-
+export const debugCgalTriangles = [];
 
 let sidebar = null;
 let dir = new URL(import.meta.url + "/../").href;
@@ -187,9 +187,10 @@ function addClickListener(elPanel){
 
 			let elBlock = e.target.closest("div");
 			let elDropdown = elBlock.getElementsByTagName("select")
+			let checkForFloor = elBlock.getElementsByTagName("input")[0].checked
 			let id = elBlock.dataset.measureid
 
-			calculateInnerVolume(id, elDropdown)
+			calculateInnerVolume(id, elDropdown, checkForFloor)
 		}
 		if (e.target && e.target.id === "innerOption") {
 			console.log("Dropdown changed");
@@ -254,7 +255,7 @@ export async function installSidebar(elPotree, potree){
 }
 
 
-function calculateInnerVolume(id, elDropdown)
+function calculateInnerVolume(id, elDropdown, checkForFloor)
 {
 	let measures = potree.measure.measures
 	let measure = measures[Number(id)]
@@ -271,7 +272,7 @@ function calculateInnerVolume(id, elDropdown)
 
 	if (option === sliceString){
 		console.log(sliceString)
-		concaveSlicing(newBounds, pointClouds, measure)
+		concaveSlicing(newBounds, pointClouds, measure, checkForFloor)
 	}
 	if (option === octreesString){
 		console.log(octreesString)
@@ -332,7 +333,43 @@ function concaveSlicing(newBounds, pointClouds, measure){
 	//test
 	//console.log(slices);
 	let pointSets = extractPoints(slices, pointClouds);
-	let hulledSlices = alphaShape(pointSets);
+/*
+    // add ground floor if checkbox is checked
+	//we want to be able to get a volume of stuff that has unknown volume
+	//toward the ground, thats why we just add points at the bottom to get
+	//basically "ground/soil/rock/whatever is underneath" volume.
+	if(checkForFloor){
+        const bottomZ = newBounds.min.z;
+
+        // grid resolution on the floor plane
+        const step = newBounds.getSize(new Vector3()).length() / 50;
+
+        pointSets = pointSets.map(points => {
+            if (points.length === 0) return points;
+
+            // XY bounds of *real* points in this slice
+            let minX =  Infinity, maxX = -Infinity;
+            let minY =  Infinity, maxY = -Infinity;
+            for (const p of points) {
+                if (p.x < minX) minX = p.x;
+                if (p.x > maxX) maxX = p.x;
+                if (p.y < minY) minY = p.y;
+                if (p.y > maxY) maxY = p.y;
+            }
+
+            // build a grid at bottomZ only under that XY rectangle
+            const floor = [];
+            for (let x = minX; x <= maxX; x += step) {
+                for (let y = minY; y <= maxY; y += step) {
+                    floor.push(new Vector3(x, y, bottomZ));
+                }
+            }
+            return points.concat(floor);
+        });
+	}*/
+	// fire-and-forget; alphaShape fills debugCgalTriangles
+	alphaShape(pointSets);
+
 
 }
 
@@ -386,23 +423,34 @@ function checkIfInSlice(pos, slice)
 
 //On the frontend it is called concave hull bcs usually, we want
 //a concave hull for volume comp even tho i use an alpha shape lib for flexibility
-function alphaShape(pointSets)
-{
-	let hulls = [];
+async function alphaShape(pointSets) {
+    // clear previous CGAL debug triangles
+    debugCgalTriangles.length = 0;
+	let totalVolume = 0;
+    for (const pointSet of pointSets) {
+        if (pointSet.length < 4) {
+            continue;
+        }
+        // alpha = 0 -> let C++   auto-pick alpha
+        const shape = await fetchAlphaShape(pointSet, 0);
+          if (!shape || shape.error || !shape.triangles) {
+              continue;
+          }
+		  totalVolume += shape.volume
+			//Wireframe visualization setup
+          for (const tri of shape.triangles) {
+              if (!tri || tri.length < 3) continue;
+			
+              debugCgalTriangles.push({
+                  a: new Vector3(tri[0].x, tri[0].y, tri[0].z),
+                  b: new Vector3(tri[1].x, tri[1].y, tri[1].z),
+                  c: new Vector3(tri[2].x, tri[2].y, tri[2].z),
+              });
+          }
+      }
+	  console.log("Total Volume:", totalVolume);
+  }
 
-	pointSets.forEach(async pointSet => {
-		// so i could either do this with geos
-		// or do it myself, then i'd use wgsl for performance
-		//either one sounds like work, bcs i dont know geos
-		//need to do some research
-		//FIXME CHANGE DIR
-		let alpha = false;
-		let shape = await fetchAlphaShape(pointSet, alpha)
-		console.log(shape)
-	});
-	//for each set of points that are in a slice, calculate the concave hull
-	return hulls;
-}
 
 //==============================================OCTREE CALC
 function octreeVolume(newBounds, pointClouds, measure){
@@ -504,20 +552,27 @@ function meshVol(newBounds, splats) {
 }
 
 async function fetchAlphaShape(pointSet, alpha) {
-	if (!alpha) {
-		alpha = 10;
-	}
+	
+    const usedAlpha = (alpha === undefined || alpha === null) ? 0 : alpha;
+
     const res = await fetch("http://localhost:8000/alpha3d_cgal", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
             points: pointSet.map(p => ({ x: p.x, y: p.y, z: p.z })),
-            alpha,
+            alpha: usedAlpha
         }),
     });
 
     const data = await res.json();
+	if (data.error != undefined) {
+    console.warn("CGAL error from server:", data.error);
+    return;
+	}
+
     console.log("CGAL stub result:", data);
+	console.log("CGAL triangles:", data.triangles);
+	console.log("Volume", data.volume);
     return data;
 }
 

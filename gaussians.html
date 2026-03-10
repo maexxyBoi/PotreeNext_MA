@@ -84,7 +84,7 @@
 	Potree.settings.edlEnabled      = true;
 	Potree.settings.dilateEnabled   = false;
 	Potree.settings.hqsEnabled      = true;
-	Potree.settings.pointBudget     = 8_000_000;
+	Potree.settings.pointBudget     = 80_000_000;
 	Potree.settings.attribute       = "rgba";
 	Potree.settings.splatType       = SplatType.QUADS;
 	Potree.settings.splatType       = SplatType.POINTS;
@@ -103,13 +103,17 @@
 		document.getElementById("msg_resources").innerText = report;
 	});
 
-
+//	WATCH OUT, having too many splats in the scene can cause holes, probably
+	// because of splat-budget. But even increasing it very much (in gaussiansplats.js)
+	//doesnt do much
 
 	// let splats2 = await GSLoader.load("./resources/models/gardentable.ply");
 	let splats2 = await GSLoader.load("./resources/gardentable.ply");
-	// let splats2 = await GSLoader.load("./resources/models/garden.ply");
 	scene.root.children.push(splats2);
 
+/* 	let splats3 = await GSLoader.load("./resources/paprika/gstest/point_cloud.ply");
+	scene.root.children.push(splats3);
+ */
 	Potree3Loader.load("./resources/eclepens.potree").then(pointcloud => {
 		//Ah ja das is natürlich gut zu wissen dass quasi alle probleme daher rühren,
 		// dass die scale angepasst wurde
@@ -122,6 +126,13 @@
 		pointcloud.name = "Eclepens";
 
 		scene.root.children.push(pointcloud);
+	});
+	PotreeLoader.load("./resources/paprika/metadata.json").then(pointcloud => {
+		pointcloud.position.set(0,0,0);
+		pointcloud.name = "Paprika";
+
+		scene.root.children.push(pointcloud);
+		
 	});
 
 

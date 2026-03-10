@@ -333,6 +333,12 @@ function concaveSlicing(newBounds, pointClouds, measure){
 	//test
 	//console.log(slices);
 	let pointSets = extractPoints(slices, pointClouds);
+    const mergedPoints = [];
+    for (const set of pointSets) {
+        for (const p of set) {
+            mergedPoints.push(p);
+        }
+    }
 /*
     // add ground floor if checkbox is checked
 	//we want to be able to get a volume of stuff that has unknown volume
@@ -368,7 +374,7 @@ function concaveSlicing(newBounds, pointClouds, measure){
         });
 	}*/
 	// fire-and-forget; alphaShape fills debugCgalTriangles
-	alphaShape(pointSets);
+	alphaShape([mergedPoints]);
 
 
 }
@@ -385,14 +391,15 @@ function extractPoints(slices, pointClouds)
     debugPickedPoints.length = 0; // clear previous
 	let pointSets = [];
 	//FIXME look if nested loop can be avoided, but since there wont be
-	//a lot of pointclouds parallel
+	//a lot of pointclouds parallel, it will be fine
 	let i = 0;
 	slices.forEach(slice => {
 		//FIXME debugging----------------------------------------------------------
 		let currentDebugColor = debugColors[i++];
 		let points = [];
 		pointClouds.forEach(pc => {
-			//FIXME for now i ' ll only take the points of the root
+			//FIXME for now i ' ll only take the points of the root,
+			//which makes the resolution bad, but works for now
 			for (let i = 0; i < pc.root.geometry.numElements; i++){
 				let point = pc.root.getPoint(i);
 				if(checkIfInSlice(point.position, slice)){

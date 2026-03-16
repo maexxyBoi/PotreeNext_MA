@@ -7,7 +7,7 @@ import {createPanel as createInfosPanel} from "./panel_infos.js";
 import {createPanel as createHoveredPanel} from "./panel_hovered.js";
 import {createPanel as createScenePanel} from "./panel_scene.js";
 import { Measure, sliceString, octreesString, meshString } from "../../interaction/measure.js";
-import { GaussianSplats, PointCloudOctree, Vector3, Box3 } from "../../Potree.js";
+import { GaussianSplats, PointCloudOctree, Vector3, Box3, Vector4 } from "../../Potree.js";
 import { simpleOctree, simpleOctreeNode } from "../../potree/octree/simpleOctree.js";
 
 export const debugColors = [ //16 colors, each neighbor i tried to make different
@@ -171,6 +171,7 @@ function createMeasureSection(){
 	elPanel.append(panel_measurements.element);
 
 	addClickListener(elPanel);
+	addSizeChangeListener(elPanel);
 
 	let section = new Section();
 	section.icon = `url(${dir}/icons/measure.svg)`;
@@ -178,6 +179,38 @@ function createMeasureSection(){
 	section.handler = panel_measurements;
 
 	return section;
+}
+
+
+function addSizeChangeListener(elPanel){
+
+	elPanel.addEventListener("click", (e) => {
+		if(e.target && e.target.id === "sizeChange"){
+			console.log("sizeChange clicked");
+
+			let elBlock = e.target.closest("div");
+			let id = elBlock.dataset.measureid
+			let measures = potree.measure.measures
+			let measure = measures[Number(id)-1]
+
+			let newSize = new Vector3(
+				Number(elBlock.getElementsByTagName("input")[0].value),
+				Number(elBlock.getElementsByTagName("input")[1].value),
+				Number(elBlock.getElementsByTagName("input")[2].value)
+			)
+
+			let newPos = new Vector3(
+				Number(elBlock.getElementsByTagName("input")[3].value),
+				Number(elBlock.getElementsByTagName("input")[4].value),
+				Number(elBlock.getElementsByTagName("input")[5].value)
+			)
+
+
+			measure.size = newSize
+			measure.markers[0] = newPos
+		}
+	}
+	);
 }
 
 function addClickListener(elPanel){
@@ -258,7 +291,7 @@ export async function installSidebar(elPotree, potree){
 function calculateInnerVolume(id, elDropdown, checkForFloor)
 {
 	let measures = potree.measure.measures
-	let measure = measures[Number(id)]
+	let measure = measures[Number(id) - 1] //actual number to index
 	//absolut keine ahnung warum ich ne collection kriege,
 	//aber das is n array :roll_eyes:
 	let option = elDropdown[0].value
@@ -304,7 +337,7 @@ function concaveSlicing(newBounds, pointClouds, measure){
 		let newMin = newBounds.min.clone();
 		let newMax = newBounds.max.clone();
 		let newValues = [];
-		//since i cant really just get the correct dim of the logest axis
+		//since i cant really *just* get the correct dim of the logest axis
 		//of the DISTANCE (bcs that is what counts, not the actual size of the box), i have to do this weird stuff
 		//i check for which dim it is.
 		if(longest == length.x) {
@@ -330,7 +363,7 @@ function concaveSlicing(newBounds, pointClouds, measure){
 		measure.sliceBoxes.push(slice.min.clone().add(slice.max).divideScalar(2))
 		measure.sliceBoxes.push(slice.size(slice))
 	});
-	//test
+	//test FIXME for now ignore slicing
 	//console.log(slices);
 	let pointSets = extractPoints(slices, pointClouds);
     const mergedPoints = [];
@@ -445,13 +478,20 @@ async function alphaShape(pointSets) {
           }
 		  totalVolume += shape.volume
 			//Wireframe visualization setup
+			let color = 0;
+			let triColor = new Vector3(0, 255, 0); //default color
           for (const tri of shape.triangles) {
               if (!tri || tri.length < 3) continue;
-			
+				if(color >= debugColors.length){
+					color = 0;
+				}
+				triColor = debugColors[color++]
+
               debugCgalTriangles.push({
-                  a: new Vector3(tri[0].x, tri[0].y, tri[0].z),
-                  b: new Vector3(tri[1].x, tri[1].y, tri[1].z),
-                  c: new Vector3(tri[2].x, tri[2].y, tri[2].z),
+                  a: new Vector4(tri[0].x, tri[0].y, tri[0].z),
+                  b: new Vector4(tri[1].x, tri[1].y, tri[1].z),
+                  c: new Vector4(tri[2].x, tri[2].y, tri[2].z),
+				  triColor: triColor,
               });
           }
       }
@@ -580,6 +620,7 @@ async function fetchAlphaShape(pointSet, alpha) {
     console.log("CGAL stub result:", data);
 	console.log("CGAL triangles:", data.triangles);
 	console.log("Volume", data.volume);
+	console.log("Alpha", data.used_alpha);
     return data;
 }
 

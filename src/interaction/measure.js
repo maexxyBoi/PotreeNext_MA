@@ -102,8 +102,10 @@ export class InnerVolMeasure extends Measure{
 		this.requiredMarkers = 0;
 		this.maxMarkers = 1;
 		this.innerVolume;
-		this.size = new Vector3(1000,100,500)
-		//we only really need this when we measure pointclouds, but i want it here, not where computation happens
+		this.size = new Vector3(1,1,1)
+		//we only really need this when we measure pointclouds,
+		// but i want it here, not where computation happens, not cluttering the
+		//same class again and again
 		this.octree = null
 		//testing purposes
 		this.measureOctBoxes = []
@@ -119,41 +121,83 @@ export class InnerVolMeasure extends Measure{
 	toHtml(prefix = ""){
 		let html = super.toHtml(prefix)
 		let id = this.measureID
+		let posX = this.markers.length > 0 ? this.markers[0].x.toFixed(3) : "N/A"
+		let posY = this.markers.length > 0 ? this.markers[0].y.toFixed(3) : "N/A"
+		let posZ = this.markers.length > 0 ? this.markers[0].z.toFixed(3) : "N/A"
 		if(!this.innerVolume) {
-			html +=
+            html +=
             `<div class="innerMeasureBlock" data-measureid="${id}">
-                <select id="innerOption"
-                    onchange="
-                        const cont = this.parentNode.querySelector('.concave-ground-options');
-                        if (cont) {
-                            cont.style.display = (this.value === '${sliceString}') ? 'block' : 'none';
-                        }
-                    "
-                >
+                <select id="innerOption">
                     <option value="${octreesString}">Pointcloud: ${octreesString}</option>
                     <option value="${sliceString}">Pointcloud: ${sliceString}</option>
                     <option value="${meshString}">Gaussians: ${meshString}</option>
                 </select>
 
-                <!-- only shown when Concave Hull Slicing is selected -->
-                <div class="concave-ground-options" style="display: none; margin-top: 4px;">
-                    <label style="display:flex;align-items:center;gap:4px;cursor:pointer;">
-                        <input type="checkbox" id="innerConcaveGround">
-                        <span>Insert ground floor at bottom of measure box</span>
+                <!-- size controls -->
+                <div class="inner-size-row" style="margin-top:4px;">
+                    <label style="display:block;">
+                        Size X:
+                        <input type="number"
+                               class="innerSize"
+                               data-dim="x"
+                               step="0.01"
+                               value="${this.size.x}">
+                    </label>
+                    <label style="display:block;">
+                        Size Y:
+                        <input type="number"
+                               class="innerSize"
+                               data-dim="y"
+                               step="0.01"
+                               value="${this.size.y}">
+                    </label>
+                    <label style="display:block;">
+                        Size Z:
+                        <input type="number"
+                               class="innerSize"
+                               data-dim="z"
+                               step="0.01"
+                               value="${this.size.z}">
                     </label>
                 </div>
-
+                <div class="inner-pos-row" style="margin-top:4px;">
+                    <label style="display:block;">
+                        Position X:
+                        <input type="number"
+                               class="innerSize"
+                               data-dim="x"
+                               step="0.01"
+                               value="${posX}">
+                    </label>
+                    <label style="display:block;">
+                        Position Y:
+                        <input type="number"
+                               class="innerSize"
+                               data-dim="y"
+                               step="0.01"
+                               value="${posY}">
+                    </label>
+                    <label style="display:block;">
+                        Position Z:
+                        <input type="number"
+                               class="innerSize"
+                               data-dim="z"
+                               step="0.01"
+                               value="${posZ}">
+                    </label>
+                </div>
+                <br></br>
+                <button id="sizeChange">Change Size & Position</button>
                 <br></br>
                 <button id="innerCalc">Calculate Volume</button>
             </div>
-            `
-		}
-		else {
-			html += `
-			<br></br>
-			<div>${this.innerVolume}</div>
-			`		
-		}
+            `;
+        } else {
+            html += `
+            <br></br>
+            <div>${this.innerVolume}</div>
+            `;
+        }
 
 		return html
 	}

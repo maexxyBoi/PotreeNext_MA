@@ -21,7 +21,7 @@ export class Measure{
 		this.showEdges = true;
 		// this.showEdgesClosed = false;
 		this.measureID = InnerVolMeasure.id++;
-
+		this.isCalculated = false;
 		counter++;
 	}
 
@@ -374,12 +374,14 @@ export class MeasureTool{
 	}
 
 	drawInner(measure){
-
-		if (measure.markers.length != 0) {
-			let pos = measure.markers[0]
-			let col = new Vector3(0, 255, 0, 100)
-			this.drawBBTest()
-			//this.renderer.drawBox(pos, measure.size, col)
+		if( !measure.isCalculated ) {
+			if (measure.markers.length != 0) {
+				let pos = measure.markers[0]
+				let col = new Vector3(0, 255, 0, 100)
+				this.drawBBTest()
+				
+				this.renderer.drawBox(pos, measure.size, col)
+			}
 		}
 	}
 	drawBBTest(){

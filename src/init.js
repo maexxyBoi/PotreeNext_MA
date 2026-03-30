@@ -635,9 +635,7 @@ function renderNotSoBasic(){
 
 	{ // HANDLE PICKING
 		let renderedObjects = Potree.state.renderedObjects;
-		
-		
-		
+				
 		let mouse = inputHandler.mouse;
 		let searchWindow = 3;
 		let wh = searchWindow / 2;
@@ -981,13 +979,14 @@ function renderNotSoBasic(){
 	//FIXME DEBUGGING----------------------------------------------------------
 	const camPos = controls.getPosition();
 	const MAX_DEBUG_SPHERES = 10000; // tweak as needed
+	const MAX_DEBUG_TRIS = 200000;
 	const n = Math.min(debugPickedPoints.length, MAX_DEBUG_SPHERES);
 /* 	console.log("debugPickedPoints:", debugPickedPoints.length);
  */
 	for (let i = 0; i < n; i++) {
 		const { position, color } = debugPickedPoints[i];
 		const depth = camPos.distanceTo(position);
-		const radius = depth / 300; // tweak size
+		const radius = depth / 100; // tweak size
 
 		renderer.drawSphere(
 			position,
@@ -1003,12 +1002,13 @@ function renderNotSoBasic(){
 		);
 	}
     // draw CGAL triangles as wireframe
-    for (const tri of debugCgalTriangles) {
-        const { a, b, c, triColor } = tri;
-        renderer.drawLine(a, b, triColor);
-        renderer.drawLine(b, c, triColor);
-        renderer.drawLine(c, a, triColor);
-    }
+	const triCount = Math.min(debugCgalTriangles.length, MAX_DEBUG_TRIS);
+	for (let i = 0; i < triCount; i++) {
+		const { a, b, c, triColor } = debugCgalTriangles[i];
+		renderer.drawLine(a, b, triColor);
+		renderer.drawLine(b, c, triColor);
+		renderer.drawLine(c, a, triColor);
+	}
 }
 
 

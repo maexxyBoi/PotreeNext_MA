@@ -296,7 +296,7 @@ function calculateInnerVolume(id, elDropdown, checkForFloor)
 	//aber das is n array :roll_eyes:
 	let option = elDropdown[0].value
 	console.log(option)
-
+	measure.isCalculated = true;
 	//Bounds set by measurement 
 	let newBounds = calcBounds(measure)
 	let pointClouds = potree.scene.root.children.filter((entry) => entry instanceof PointCloudOctree)
@@ -365,7 +365,7 @@ function concaveSlicing(newBounds, pointClouds, measure){
 	});
 	//test FIXME for now ignore slicing
 	//console.log(slices);
-	let pointSets = extractPoints(slices, pointClouds);
+	let pointSets = extractPoints(slices, pointClouds, newBounds);
     const mergedPoints = [];
     for (const set of pointSets) {
         for (const p of set) {
@@ -419,41 +419,113 @@ function slice(i,j, min, max, length, sliceAmount)
 	return [min, max];
 }
 
-function extractPoints(slices, pointClouds)
-{
-    debugPickedPoints.length = 0; // clear previous
-	let pointSets = [];
-	//FIXME look if nested loop can be avoided, but since there wont be
-	//a lot of pointclouds parallel, it will be fine
-	let i = 0;
-	slices.forEach(slice => {
-		//FIXME debugging----------------------------------------------------------
-		let currentDebugColor = debugColors[i++];
-		let points = [];
-		pointClouds.forEach(pc => {
-			//FIXME for now i ' ll only take the points of the root,
-			//which makes the resolution bad, but works for now
-			for (let i = 0; i < pc.root.geometry.numElements; i++){
-				let point = pc.root.getPoint(i);
-				if(checkIfInSlice(point.position, slice)){
-					points.push(point.position.clone())
-                    //FIXME DEBUGGING store for debug drawing
-                    debugPickedPoints.push({
-                        position: point.position.clone(),
-                        color: currentDebugColor,
-                    });
-				}
-			}
-		});
-		pointSets.push(points);
-	});
+function getAllNodes(array, node){
+    if (!node) return;
 
-	//extract all positional data of points within a slice
-	return pointSets;
+    if (node.geometry && node.geometry.numElements > 0){
+        array.push(node);
+    }
+
+    if (node.children){
+        for (const child of node.children){
+            if (child){
+                getAllNodes(array, child);
+            }
+        }
+    }
 }
 
-function checkIfInSlice(pos, slice)
+//Slices are excluded for now bcs they introduce border-areas where no points 
+//are picked. TODO
+function extractPoints(slices, pointClouds, newBounds)
 {
+    debugPickedPoints.length = 0;
+    const pointSets = [];
+
+	pointClouds.forEach(cloud => {
+		for (const node of cloud.visibleNodes){
+			if (node.boundingBox.intersectsBox(newBounds))
+			{
+				let geom = node.geometry
+				if (!geom || !geom.numElements) continue;
+
+				for(let i = 0; i < geom.numPoints; i++)
+				{
+					const point = node.getPoint(i);
+					const pos = point.position;
+					if (checkIfInSlice(pos, newBounds)) {
+						const pClone = pos.clone();
+						pointSets.push(pClone);
+						//compute intense 
+						/*debugPickedPoints.push({
+							position: pClone,
+							color: new Vector3(255, 0, 0),
+						});*/
+					}
+				}
+			}
+		}
+	});
+/*
+    // --- sanity: collect nodes per cloud and log total loaded points ---
+    const nodesPerCloud = new Map();
+    for (const pc of pointClouds){
+        if (!pc.root) continue;
+
+        const nodes = [];
+        getAllNodes(nodes, pc.root);
+        nodesPerCloud.set(pc, nodes);
+
+        let totalPointsInNodes = 0;
+        for (const node of nodes){
+            const g = node.geometry;
+            if (g && g.numElements) totalPointsInNodes += g.numElements;
+        }
+        console.log(`PointCloud "${pc.name}": loaded points in nodes =`, totalPointsInNodes);
+    }
+    // -------------------------------------------------------------------
+
+    let colorIndex = 0;
+
+    for (const slice of slices){
+        const currentDebugColor = debugColors[colorIndex++ % debugColors.length];
+        const points = [];
+
+        for (const pc of pointClouds){
+            const nodes = nodesPerCloud.get(pc);
+            if (!nodes) continue;
+
+            for (const node of nodes){
+                const geom = node.geometry;
+                if (!geom || !geom.numElements) continue;
+
+                if (node.boundingBox && !node.boundingBox.intersectsBox(slice)){
+                    continue;
+                }
+
+                for (let i = 0; i < geom.numElements; i++){
+                    const point = node.getPoint(i);
+                    const pos = point.position;
+
+                    if (checkIfInSlice(pos, slice)){
+                        const pClone = pos.clone();
+                        points.push(pClone);
+                        debugPickedPoints.push({
+                            position: pClone,
+                            color:    currentDebugColor,
+                        });
+                    }
+                }
+            }
+        }
+
+        pointSets.push(points);
+    }*/
+
+    return [pointSets];
+}
+
+function checkIfInSlice(pos, slice){
     return (
         pos.x >= slice.min.x && pos.x <= slice.max.x &&
         pos.y >= slice.min.y && pos.y <= slice.max.y &&
@@ -472,7 +544,7 @@ async function alphaShape(pointSets) {
             continue;
         }
         // alpha = 0 -> let C++   auto-pick alpha
-        const shape = await fetchAlphaShape(pointSet, 0);
+        const shape = await fetchAlphaShape(pointSet, .01);
           if (!shape || shape.error || !shape.triangles) {
               continue;
           }

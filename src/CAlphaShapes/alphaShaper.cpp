@@ -14,6 +14,7 @@
 #include <CGAL/Triangulation_cell_base_3.h>
 #include <CGAL/Triangulation_data_structure_3.h>
 #include <CGAL/Delaunay_triangulation_3.h>
+#include <CGAL/Polygon_mesh_processing/measure.h> 
 
 using json = nlohmann::json;
 
@@ -67,6 +68,7 @@ int main() {
         out["used_alpha"] = alpha;
         out["num_triangles"] = 0;
         out["volume"] = 0.0;
+		out["testVol"] = 0.0;
         std::cout << out.dump();
         return 0;
     }
@@ -96,8 +98,38 @@ int main() {
 
     json triangles = json::array();
     double volume = 0.0;
+	int i = 0;
+	Point a(0.0, 0.0, 0.0);
+	Point b(1.0, 1.0, 1.0);
+	Point c(1.0, 1.0, 0.0);
+	Point d(1.0, 0.0, 1.0);
 
-    for (auto it = A.alpha_shape_facets_begin();
+	double testVol = CGAL::to_double(CGAL::volume(a, b, c, d));
+	for (auto cit = A.finite_cells_begin(); cit != A.finite_cells_end(); ++cit) {
+		auto clas = A.classify(cit);
+		if (clas == Alpha_shape_3::INTERIOR ) {
+			const Point& p0 = cit->vertex(0)->point();
+			const Point& p1 = cit->vertex(1)->point();
+			const Point& p2 = cit->vertex(2)->point();
+			const Point& p3 = cit->vertex(3)->point();
+			if (i < 2){
+				json tri = json::array();
+				tri.push_back({ {"x", p0.x()}, {"y", p0.y()}, {"z", p0.z()} });
+				tri.push_back({ {"x", p1.x()}, {"y", p1.y()}, {"z", p1.z()} });
+				tri.push_back({ {"x", p2.x()}, {"y", p2.y()}, {"z", p2.z()} });
+				tri.push_back({ {"x", p3.x()}, {"y", p3.y()}, {"z", p3.z()} });
+				i++;
+				triangles.push_back(tri);
+				// CGAL has a tetrahedron volume helper:
+			}
+			double v = CGAL::to_double(CGAL::volume(p0, p1, p2, p3));
+			volume += v;
+		}
+	}
+
+	//out["volume"] = std::abs(volume);
+
+    /*for (auto it = A.alpha_shape_facets_begin();
          it != A.alpha_shape_facets_end(); ++it) {
 
         Facet f = *it;
@@ -129,12 +161,12 @@ int main() {
         tri.push_back({ {"x", p2.x()}, {"y", p2.y()}, {"z", p2.z()} });
 
         triangles.push_back(tri);
-    }
+    }*/
 
     out["num_triangles"] = triangles.size();
     out["triangles"] = triangles;
     out["volume"] = std::abs(volume); // alpha-shape enclosed volume
-
+	out["testVol"] = testVol;
 
     std::cout << out.dump();
     return 0;

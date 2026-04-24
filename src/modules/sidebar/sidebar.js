@@ -192,21 +192,32 @@ function addSizeChangeListener(elPanel){
 			let id = elBlock.dataset.measureid
 			let measures = potree.measure.measures
 			let measure = measures[Number(id)-1]
-
-			let newSize = new Vector3(
-				Number(elBlock.getElementsByTagName("input")[0].value),
-				Number(elBlock.getElementsByTagName("input")[1].value),
-				Number(elBlock.getElementsByTagName("input")[2].value)
-			)
+			let inputs = elBlock.getElementsByTagName("input");
+			let isSphere = inputs[0].value === "true";
+			//If sphere is checked, we actually look at the
+			//radius. if not we dont
+			if (isSphere)
+			{
+				let newRadius = Number(inputs[1].value);
+				measure.sphereRadius = newRadius;
+			}
+			//we look at the cube size dimensions only when we know that 
+			//we dont have a sphere at out hands.
+			else{
+				let newSize = new Vector3(
+					Number(inputs[2].value),
+					Number(inputs[3].value),
+					Number(inputs[4].value)
+				)
+				measure.size = newSize
+			}
 
 			let newPos = new Vector3(
-				Number(elBlock.getElementsByTagName("input")[3].value),
-				Number(elBlock.getElementsByTagName("input")[4].value),
-				Number(elBlock.getElementsByTagName("input")[5].value)
+				Number(inputs[5].value),
+				Number(inputs[6].value),
+				Number(inputs[7].value)
 			)
-
-
-			measure.size = newSize
+			
 			measure.markers[0] = newPos
 		}
 	}
@@ -215,6 +226,15 @@ function addSizeChangeListener(elPanel){
 
 function addClickListener(elPanel){
 	elPanel.addEventListener("click", (e) => {
+		if(e.target && e.target.id === "shapeSphere"){
+			let elBlock = e.target.closest("div");
+			let id = elBlock.dataset.measureid;
+			let measures = potree.measure.measures;
+			let measure = measures[Number(id) - 1];
+
+			measure.useSphere = e.target.checked;
+			measure.isCalculated = false;
+		}
 		if(e.target && e.target.id === "innerCalc"){
 			console.log("innerCalc clicked");
 
@@ -288,7 +308,7 @@ export async function installSidebar(elPotree, potree){
 }
 
 
-function calculateInnerVolume(id, elDropdown, checkForFloor)
+function calculateInnerVolume(id, elDropdown, checkForFloor, isSurface)
 {
 	let measures = potree.measure.measures
 	let measure = measures[Number(id) - 1] //actual number to index
@@ -305,7 +325,7 @@ function calculateInnerVolume(id, elDropdown, checkForFloor)
 
 	if (option === sliceString){
 		console.log(sliceString)
-		concaveSlicing(newBounds, pointClouds, measure, checkForFloor)
+		concaveSlicing(newBounds, pointClouds, measure, isSurface)
 	}
 	if (option === octreesString){
 		console.log(octreesString)
@@ -319,7 +339,7 @@ function calculateInnerVolume(id, elDropdown, checkForFloor)
 	}
 }
 
-function concaveSlicing(newBounds, pointClouds, measure){
+function concaveSlicing(newBounds, pointClouds, measure, isSurface){
 
 	//test
 	//console.log(newBounds);
@@ -365,7 +385,7 @@ function concaveSlicing(newBounds, pointClouds, measure){
 	});
 	//test FIXME for now ignore slicing
 	//console.log(slices);
-	let pointSets = extractPoints(slices, pointClouds, newBounds);
+	let pointSets = extractPoints(slices, pointClouds, newBounds, measure);
     const mergedPoints = [];
     for (const set of pointSets) {
         for (const p of set) {
@@ -407,7 +427,7 @@ function concaveSlicing(newBounds, pointClouds, measure){
         });
 	}*/
 	// fire-and-forget; alphaShape fills debugCgalTriangles
-	alphaShape([mergedPoints]);
+	alphaShape([mergedPoints], newBounds, isSurface);
 
 
 }
@@ -434,10 +454,21 @@ function getAllNodes(array, node){
         }
     }
 }
+function isPointInSelection(pos, bounds, measure){
+    if(measure?.useSphere && measure.markers.length > 0){
+        const center = measure.markers[0];
+        const radius = Math.max(0, Number(measure.sphereRadius) || 0);
+        return pos.distanceTo(center) <= radius;
+    }
 
+    return checkIfInSlice(pos, bounds);
+}
 //Slices are excluded for now bcs they introduce border-areas where no points 
 //are picked. TODO
-function extractPoints(slices, pointClouds, newBounds)
+//REFUNCTIONED TO EXTRACT POINTS FROM SPHERICAL MEASURING.
+//old code will be here for slicing too, but be aware of that, this function
+// has two purposes.
+function extractPoints(slices, pointClouds, newBounds, measure)
 {
     debugPickedPoints.length = 0;
     const pointSets = [];
@@ -535,40 +566,124 @@ function checkIfInSlice(pos, slice){
 
 //On the frontend it is called concave hull bcs usually, we want
 //a concave hull for volume comp even tho i use an alpha shape lib for flexibility
-async function alphaShape(pointSets) {
+async function alphaShape(pointSets, newBounds, isSurface) {
     // clear previous CGAL debug triangles
     debugCgalTriangles.length = 0;
 	let totalVolume = 0;
-    for (const pointSet of pointSets) {
+    for (let pointSet of pointSets) {
         if (pointSet.length < 4) {
             continue;
         }
-        // alpha = 0 -> let C++   auto-pick alpha
-        const shape = await fetchAlphaShape(pointSet, .01);
-          if (!shape || shape.error || !shape.triangles) {
+		let floorAndObject = addSyntheticFloor(pointSet, newBounds);
+
+		//i wont need a floor to make the object "watertight" if i just want the surface
+		if(!isSurface){ 
+			pointSet = floorAndObject;
+		}
+		//Debugging of above function that should add a floor
+		/*floorAndObject.forEach(p => {
+			debugPickedPoints.push({
+				position: p.clone(),
+				color: new Vector3(0, 255, 255),
+			});
+		});*/
+		const alpha = .7
+        const shape = await fetchAlphaShape(pointSet, alpha, isSurface);
+          if (!shape || shape.error ) {
               continue;
           }
-		  totalVolume += shape.volume
+		  totalVolume = shape.volume
 			//Wireframe visualization setup
 			let color = 0;
 			let triColor = new Vector3(0, 255, 0); //default color
-          for (const tri of shape.triangles) {
-              if (!tri || tri.length < 3) continue;
-				if(color >= debugColors.length){
-					color = 0;
-				}
-				triColor = debugColors[color++]
-
+		  if (shape.tetrahedrons) {
+			for (const tet of shape.tetrahedrons) {
+				if (!tet || tet.length < 4) continue;
+					if(color >= debugColors.length){
+						color = 0;
+					}
+					triColor = debugColors[color++]
+					debugCgalTriangles.push({
+					a: new Vector3(tet[0].x, tet[0].y, tet[0].z),
+					b: new Vector3(tet[1].x, tet[1].y, tet[1].z),
+					c: new Vector3(tet[2].x, tet[2].y, tet[2].z),
+					d: new Vector3(tet[3].x, tet[3].y, tet[3].z),
+					triColor: triColor,
+				});
+			}
+		  }
+		  if (shape.triangles) {
+			for (const tri of shape.triangles) {
+				if (!tri || tri.length < 3) continue;
+					if(color >= debugColors.length){
+						color = 0;
+					}
+					triColor = debugColors[color++]
               debugCgalTriangles.push({
                   a: new Vector4(tri[0].x, tri[0].y, tri[0].z),
                   b: new Vector4(tri[1].x, tri[1].y, tri[1].z),
                   c: new Vector4(tri[2].x, tri[2].y, tri[2].z),
 				  triColor: triColor,
               });
+			}
           }
+		console.log("Time taken: ", shape.timing_ms);
+		console.log("Result: ", (!isSurface ? "Volume " + shape.volume : "Surface " + shape.area));
       }
-	  console.log("Total Volume:", totalVolume);
   }
+
+function addSyntheticFloor(points, bounds) {
+
+	/*debugPickedPoints.push({
+		position: bounds.min.clone(),
+		color: new Vector3(255, 255, 0),
+	});
+	debugPickedPoints.push({
+		position: bounds.max.clone(),
+		color: new Vector3(255, 0, 0),
+	});*/
+	//ok for some weird reason min and max are changed (intuitively speaking)
+	    const floorZ = bounds.max.z;
+
+    // 2) Estimate spacing from data density
+    const n = Math.min(points.length, 30);
+    let minDist = Infinity;
+    for (let i = 0; i < n; i++) {
+        const p = points[i];
+        for (let j = i + 1; j < Math.min(i + 20, n); j++) {
+            const q = points[j];
+            const dx = p.x - q.x, dy = p.y - q.y;
+            const d2 = dx * dx + dy * dy;
+            if (d2 > 1e-4 && d2 < minDist) minDist = d2;
+        }
+    }
+    const step = Math.max(Math.sqrt(minDist) * 1.5, 0.005);
+
+    // 3) Footprint in XY from object points
+    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+    for (const p of points) {
+        if (p.x < minX) minX = p.x;
+        if (p.x > maxX) maxX = p.x;
+        if (p.y < minY) minY = p.y;
+        if (p.y > maxY) maxY = p.y;
+    }
+
+    // 4) Add 2-3 thin layers to stabilize tetrahedralization
+    const eps = step * 0.2;
+    //const layers = [floorZ - eps, floorZ, floorZ + eps];
+	const layers = [floorZ];
+
+    const floorPts = [];
+    for (const z of layers) {
+        for (let x = minX; x <= maxX; x += step) {
+            for (let y = minY; y <= maxY; y += step) {
+                floorPts.push(new Vector3(x, y, z));
+            }
+        }
+    }
+
+    return points.concat(floorPts);
+}
 
 
 //==============================================OCTREE CALC
@@ -670,7 +785,7 @@ function recCalcVol (node, originalLeaves, measure, results)
 function meshVol(newBounds, splats) {
 }
 
-async function fetchAlphaShape(pointSet, alpha) {
+async function fetchAlphaShape(pointSet, alpha, isSurface) {
 	
     const usedAlpha = (alpha === undefined || alpha === null) ? 0 : alpha;
 
@@ -679,7 +794,8 @@ async function fetchAlphaShape(pointSet, alpha) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
             points: pointSet.map(p => ({ x: p.x, y: p.y, z: p.z })),
-            alpha: usedAlpha
+            alpha: usedAlpha,
+            surface: isSurface
         }),
     });
 
@@ -691,8 +807,9 @@ async function fetchAlphaShape(pointSet, alpha) {
 
     console.log("CGAL stub result:", data);
 	console.log("CGAL triangles:", data.triangles);
-	console.log("Volume", data.volume);
-	console.log("Alpha", data.used_alpha);
+	//console.log("Volume", data.volume);
+	//console.log("Alpha", data.used_alpha);
+	console.log("Preset alpha: ", alpha)
     return data;
 }
 

@@ -74,7 +74,7 @@ let mat4Buffer;
 let colorsBuffer;
 
 let bindGroup = null;
-let capacity = 10_000;
+let capacity = 200_000;
 let f32Matrices = new Float32Array(16 * capacity);
 let f32Colors = new Float32Array(4 * capacity);
 
@@ -129,7 +129,20 @@ function createPipeline(renderer){
 			module: module,
 			entryPoint: "main_fragment",
 			targets: [
-				{format: "bgra8unorm"},
+				{format: "bgra8unorm",
+					blend: {
+                color: {
+                    srcFactor: "src-alpha",
+                    dstFactor: "one-minus-src-alpha",
+                    operation: "add",
+                },
+                alpha: {
+                    srcFactor: "one",
+                    dstFactor: "one-minus-src-alpha",
+                    operation: "add",
+            		},
+            			},
+        		},
 				{format: "r32uint"},
 			],
 		},

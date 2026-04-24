@@ -836,6 +836,72 @@ export class Renderer{
 
 	}
 
+setupGpuDiagnostics() {
+    this.device.addEventListener("uncapturederror", (event) => {
+        console.error("[WebGPU uncaptured error]", event.error);
+    });
+
+    this.device.lost.then((info) => {
+        console.error("[WebGPU device lost]", info.message, info.reason);
+    });
+}
+
+// Use this when creating WGSL shader modules
+async createShaderModuleWithDiagnostics(code, label = "shader") {
+    const module = this.device.createShaderModule({
+        code,
+        label,
+    });
+
+    const info = await module.compilationInfo();
+    for (const message of info.messages) {
+        const level = message.type.toUpperCase();
+        console[level === "WARNING" ? "warn" : "error"](
+            `[WGSL ${label}] ${level} at line ${message.lineNum}, column ${message.linePos}: ${message.message}`
+        );
+    }
+
+    return module;
+}
+
+// Wrap pipeline creation so validation errors are printed
+async createRenderPipelineWithDiagnostics(descriptor, label = "pipeline") {
+    this.device.pushErrorScope("validation");
+    try {
+        const pipeline = this.device.createRenderPipeline(descriptor);
+        const error = await this.device.popErrorScope();
+
+        if (error) {
+            console.error(`[WebGPU ${label}] validation error after pipeline creation:`, error);
+        }
+
+        return pipeline;
+    } catch (e) {
+        const error = await this.device.popErrorScope().catch(() => null);
+        console.error(`[WebGPU ${label}] exception during pipeline creation:`, e, error);
+        throw e;
+    }
+}
+
+// Wrap command submission / render encoding
+async runWithGpuErrorScope(label, work) {
+    this.device.pushErrorScope("validation");
+    try {
+        const result = await work();
+        const error = await this.device.popErrorScope();
+
+        if (error) {
+            console.error(`[WebGPU ${label}] validation error:`, error);
+        }
+
+        return result;
+    } catch (e) {
+        const error = await this.device.popErrorScope().catch(() => null);
+        console.error(`[WebGPU ${label}] exception:`, e, error);
+        throw e;
+    }
+}
+
 	// render(scene, camera){
 		
 	// }

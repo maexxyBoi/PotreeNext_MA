@@ -3,6 +3,7 @@
 #include <vector>
 #include <string>
 #include <iterator>
+#include <chrono>
 
 #include <nlohmann/json.hpp>
 
@@ -49,6 +50,11 @@ int main() {
         alpha = in["alpha"].get<double>();
     }
 
+	bool surface = false;
+    if (in.contains("surface")) {
+        surface = in["surface"].get<bool>();
+    }
+
     std::vector<Point> pts;
     pts.reserve(in["points"].size());
     double cx = 0.0, cy = 0.0, cz = 0.0; // for centroid, i need them later for integration
@@ -68,22 +74,25 @@ int main() {
         out["used_alpha"] = alpha;
         out["num_triangles"] = 0;
         out["volume"] = 0.0;
+		out["area"] = 0.0;
 		out["testVol"] = 0.0;
         std::cout << out.dump();
         return 0;
     }
 
-    cx /= pts.size();
+    /*cx /= pts.size();
     cy /= pts.size();
     cz /= pts.size();
-    Point ref(cx, cy, cz);
+    Point ref(cx, cy, cz);*/
+	using Clock = std::chrono::steady_clock;
+	auto beforeAlphaGeneration = Clock::now();
 
     // Build alpha shape without fixed alpha first
     Alpha_shape_3 A(pts.begin(), pts.end(), Alpha_shape_3::GENERAL);
 
     // Choose alpha:
-    // - if user-provided alpha > 0, try that
-    // - otherwise, pick a middle alpha from CGAL's alpha spectrum
+    // if user-provided alpha > 0, try that
+    // otherwise, pick a middle alpha from CGAL's alpha spectrum
     if (alpha > 0.0) {
         A.set_alpha(alpha);
     } else if (A.number_of_alphas() > 0) {
@@ -96,8 +105,9 @@ int main() {
 
     out["used_alpha"] = alpha;
 
-    json triangles = json::array();
+    json tetrahedrons = json::array();
     double volume = 0.0;
+	double area = 0.0;
 	int i = 0;
 	Point a(0.0, 0.0, 0.0);
 	Point b(1.0, 1.0, 1.0);
@@ -105,67 +115,71 @@ int main() {
 	Point d(1.0, 0.0, 1.0);
 
 	double testVol = CGAL::to_double(CGAL::volume(a, b, c, d));
-	for (auto cit = A.finite_cells_begin(); cit != A.finite_cells_end(); ++cit) {
-		auto clas = A.classify(cit);
-		if (clas == Alpha_shape_3::INTERIOR ) {
-			const Point& p0 = cit->vertex(0)->point();
-			const Point& p1 = cit->vertex(1)->point();
-			const Point& p2 = cit->vertex(2)->point();
-			const Point& p3 = cit->vertex(3)->point();
-			if (i < 2){
+	if(!surface){
+		for (auto cit = A.finite_cells_begin(); cit != A.finite_cells_end(); ++cit) {
+			auto clas = A.classify(cit);
+			if (clas == Alpha_shape_3::INTERIOR ) {
+				const Point& p0 = cit->vertex(0)->point();
+				const Point& p1 = cit->vertex(1)->point();
+				const Point& p2 = cit->vertex(2)->point();
+				const Point& p3 = cit->vertex(3)->point();
 				json tri = json::array();
 				tri.push_back({ {"x", p0.x()}, {"y", p0.y()}, {"z", p0.z()} });
 				tri.push_back({ {"x", p1.x()}, {"y", p1.y()}, {"z", p1.z()} });
 				tri.push_back({ {"x", p2.x()}, {"y", p2.y()}, {"z", p2.z()} });
 				tri.push_back({ {"x", p3.x()}, {"y", p3.y()}, {"z", p3.z()} });
 				i++;
-				triangles.push_back(tri);
+				tetrahedrons.push_back(tri);
 				// CGAL has a tetrahedron volume helper:
+				double v = CGAL::to_double(CGAL::volume(p0, p1, p2, p3));
+				volume += v;
 			}
-			double v = CGAL::to_double(CGAL::volume(p0, p1, p2, p3));
-			volume += v;
 		}
+		
 	}
-
 	//out["volume"] = std::abs(volume);
+	json triangles = json::array();
+	if(surface){
+		for (auto it = A.alpha_shape_facets_begin();
+			it != A.alpha_shape_facets_end(); ++it) {
 
-    /*for (auto it = A.alpha_shape_facets_begin();
-         it != A.alpha_shape_facets_end(); ++it) {
+			Facet f = *it;
+			Alpha_shape_3::Cell_handle cell = f.first;
+			int i = f.second;
 
-        Facet f = *it;
-        Alpha_shape_3::Cell_handle cell = f.first;
-        int i = f.second;
+			int ids[3];
+			int k = 0;
+			for (int v = 0; v < 4; ++v) {
+				if (v == i) continue;
+				ids[k++] = v;
+			}
 
-        int ids[3];
-        int k = 0;
-        for (int v = 0; v < 4; ++v) {
-            if (v == i) continue;
-            ids[k++] = v;
-        }
+			Point p0 = cell->vertex(ids[0])->point();
+			Point p1 = cell->vertex(ids[1])->point();
+			Point p2 = cell->vertex(ids[2])->point();
 
-        Point p0 = cell->vertex(ids[0])->point();
-        Point p1 = cell->vertex(ids[1])->point();
-        Point p2 = cell->vertex(ids[2])->point();
+			K::Vector_3 e1 = p1 - p0;
+			K::Vector_3 e2 = p2 - p0;
+			K::Vector_3 cross = CGAL::cross_product(e1, e2);
+			double triArea = 0.5 * std::sqrt(CGAL::to_double(cross.squared_length()));
+			area += triArea;
 
-        // accumulate volume via tetrahedron (ref, p0, p1, p2)
-        K::Vector_3 v0 = p0 - ref;
-        K::Vector_3 v1 = p1 - ref;
-        K::Vector_3 v2 = p2 - ref;
-        K::Vector_3 cp = CGAL::cross_product(v1, v2);
-        double vTet = CGAL::to_double(v0 * cp) / 6.0;
-        volume += vTet;
-
-        json tri = json::array();
-        tri.push_back({ {"x", p0.x()}, {"y", p0.y()}, {"z", p0.z()} });
-        tri.push_back({ {"x", p1.x()}, {"y", p1.y()}, {"z", p1.z()} });
-        tri.push_back({ {"x", p2.x()}, {"y", p2.y()}, {"z", p2.z()} });
-
-        triangles.push_back(tri);
-    }*/
-
-    out["num_triangles"] = triangles.size();
-    out["triangles"] = triangles;
-    out["volume"] = std::abs(volume); // alpha-shape enclosed volume
+			json tri = json::array();
+			tri.push_back({ {"x", p0.x()}, {"y", p0.y()}, {"z", p0.z()} });
+			tri.push_back({ {"x", p1.x()}, {"y", p1.y()}, {"z", p1.z()} });
+			tri.push_back({ {"x", p2.x()}, {"y", p2.y()}, {"z", p2.z()} });
+			triangles.push_back(tri);
+    	}
+	}
+	auto afterResultPushOut = Clock::now();
+	out["timing_ms"] = std::chrono::duration_cast<std::chrono::milliseconds>(
+		afterResultPushOut - beforeAlphaGeneration
+		).count();
+   //out["num_triangles"] = triangles.size();
+    out["tetrahedrons"] = tetrahedrons;
+	out["triangles"] = triangles;
+    out["volume"] = std::abs(volume);
+	out["area"] = std::abs(area);
 	out["testVol"] = testVol;
 
     std::cout << out.dump();

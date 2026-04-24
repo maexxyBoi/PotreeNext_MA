@@ -8,8 +8,15 @@ find_package(CGAL REQUIRED COMPONENTS Core)
 find_package(nlohmann_json CONFIG REQUIRED)
 
 add_executable(alphaShaper alphaShaper.cpp)
+add_executable(alphaShaperRetroFit alphaShaperRetrofit.cpp)
+
 
 target_link_libraries(alphaShaper
+    PRIVATE
+        CGAL::CGAL
+        nlohmann_json::nlohmann_json
+)
+target_link_libraries(alphaShaperRetroFit
     PRIVATE
         CGAL::CGAL
         nlohmann_json::nlohmann_json

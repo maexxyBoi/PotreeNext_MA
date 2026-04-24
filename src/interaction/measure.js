@@ -3,7 +3,7 @@ import {Potree, Mesh, Box3, Vector3, Vector4, geometries, SceneNode} from "potre
 import {EventDispatcher, KeyCodes, MouseCodes} from "potree";
 
 let counter = 0;
-export const sliceString = "Concave Hull Slicing";
+export const sliceString = "Alpha Shapes";
 export const octreesString = "Octrees";
 export const meshString = "Mesh Extraction Volume";
 
@@ -77,7 +77,43 @@ export class DistanceMeasure extends Measure{
 	addMarker(position){
 		this.markers.push(position.clone());
 	}
+    toHtml(prefix = ""){
+        let html = super.toHtml(prefix);
 
+        if(this.markers.length < 2){
+            return html;
+        }
+
+        let rows = "";
+        let total = 0.0;
+
+        for(let i = 0; i < this.markers.length - 1; i++){
+            const a = this.markers[i];
+            const b = this.markers[i + 1];
+            const d = a.distanceTo(b);
+            total += d;
+
+            rows += `
+                <tr>
+                    <td style="text-align:left">P${i + 1} -> P${i + 2}</td>
+                    <td style="text-align:right">${d.toFixed(3)}</td>
+                </tr>
+            `;
+        }
+
+        html += `
+            <div style="margin-top: 6px;"><b>Segment Distances</b></div>
+            <table style="width: 100%">
+                ${rows}
+                <tr>
+                    <td style="text-align:left"><b>Total</b></td>
+                    <td style="text-align:right"><b>${total.toFixed(3)}</b></td>
+                </tr>
+            </table>
+        `;
+
+        return html;
+    }
 };
 
 export class HeightMeasure extends Measure{
@@ -101,7 +137,9 @@ export class InnerVolMeasure extends Measure{
 		super();
 		this.requiredMarkers = 0;
 		this.maxMarkers = 1;
+		this.useSphere = false;
 		this.innerVolume;
+		this.sphereRadius = 0.5;
 		this.size = new Vector3(1,1,1)
 		//we only really need this when we measure pointclouds,
 		// but i want it here, not where computation happens, not cluttering the
@@ -121,9 +159,11 @@ export class InnerVolMeasure extends Measure{
 	toHtml(prefix = ""){
 		let html = super.toHtml(prefix)
 		let id = this.measureID
-		let posX = this.markers.length > 0 ? this.markers[0].x.toFixed(3) : "N/A"
-		let posY = this.markers.length > 0 ? this.markers[0].y.toFixed(3) : "N/A"
-		let posZ = this.markers.length > 0 ? this.markers[0].z.toFixed(3) : "N/A"
+		const cubeControlsStyle = this.useSphere ? "display:none;" : "";
+		const sphereControlsStyle = this.useSphere ? "" : "display:none;";
+		let posX = this.markers.length > 0 ? this.markers[0].x.toFixed(3) : "0"
+		let posY = this.markers.length > 0 ? this.markers[0].y.toFixed(3) : "0"
+		let posZ = this.markers.length > 0 ? this.markers[0].z.toFixed(3) : "0"
 		if(!this.innerVolume) {
             html +=
             `<div class="innerMeasureBlock" data-measureid="${id}">
@@ -133,6 +173,16 @@ export class InnerVolMeasure extends Measure{
                     <option value="${meshString}">Gaussians: ${meshString}</option>
                 </select>
 
+				<label style="display:block; margin-top:6px;">
+					<input type="checkbox" id="shapeSphere" ${this.useSphere ? "checked" : ""} value=${this.useSphere}>
+					Use sphere
+				</label>
+				<div class="inner-radius-row" style="margin-top:4px; ${sphereControlsStyle}">
+					<label style="display:block;">
+						Radius:
+						<input type="number" id="sphereRadius" step="0.01" min="0" value="${this.sphereRadius}">
+					</label>
+				</div>
                 <!-- size controls -->
                 <div class="inner-size-row" style="margin-top:4px;">
                     <label style="display:block;">
@@ -190,6 +240,7 @@ export class InnerVolMeasure extends Measure{
                 <button id="sizeChange">Change Size & Position</button>
                 <br></br>
                 <button id="innerCalc">Calculate Volume</button>
+                <button id="surfCalc">Calculate Surface</button>
             </div>
             `;
         } else {
@@ -264,7 +315,7 @@ export class MeasureTool{
 					let radius = depth / 50;
 
 					let args = {
-						color: new Vector4(0, 1, 0, 1)
+						color: new Vector4(0, 1, 0, .5)
 					};
 					if(measure.markers_highlighted[markerIndex]){
 						args.color.set(255, 127, 80, 255).multiplyScalar(1 / 255);
@@ -374,15 +425,21 @@ export class MeasureTool{
 	}
 
 	drawInner(measure){
-		if( !measure.isCalculated ) {
-			if (measure.markers.length != 0) {
-				let pos = measure.markers[0]
-				let col = new Vector3(0, 255, 0, 100)
-				this.drawBBTest()
-				
-				this.renderer.drawBox(pos, measure.size, col)
+		if(!measure.isCalculated){
+			if(measure.markers.length !== 0){
+				let pos = measure.markers[0];
+
+				if(measure.useSphere){
+					const radius = Math.max(0, Number(measure.sphereRadius) || 0);
+					this.renderer.drawSphere(pos, radius, {
+						color: new Vector4(0, 1, 0, 0.35),
+					});
+				}else{
+					let col = new Vector3(0, 255, 0, 100);
+					this.renderer.drawBox(pos, measure.size, col);
+				}
 			}
-		}
+    	}
 	}
 	drawBBTest(){
 

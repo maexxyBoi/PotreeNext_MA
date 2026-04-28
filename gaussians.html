@@ -108,12 +108,20 @@
 	//doesnt do much
 
 	// let splats2 = await GSLoader.load("./resources/models/gardentable.ply");
-	let splats2 = await GSLoader.load("./resources/gardentable.ply");
-	scene.root.children.push(splats2);
+	//let splats2 = await GSLoader.load("./resources/gardentable.ply");
+	//scene.root.children.push(splats2);
 
-/* 	let splats3 = await GSLoader.load("./resources/paprika/gstest/point_cloud.ply");
-	scene.root.children.push(splats3);
- */
+ 	let splats2 = await GSLoader.load("./resources/pot/3dgs/point_cloud.ply");
+	//scene.root.children.push(splats2);
+ 	let splats3 = await GSLoader.load("./resources/paprika/gstest/point_cloud.ply");
+	//scene.root.children.push(splats3);
+ 	let splats4 = await GSLoader.load("./resources/sugar/gstest/point_cloud.ply");
+	//scene.root.children.push(splats4);
+ 	let splats5 = await GSLoader.load("./resources/parcel/3dgs/point_cloud.ply");
+	//scene.root.children.push(splats5);
+
+
+ 
 	Potree3Loader.load("./resources/eclepens.potree").then(pointcloud => {
 		//Ah ja das is natürlich gut zu wissen dass quasi alle probleme daher rühren,
 		// dass die scale angepasst wurde
@@ -129,9 +137,46 @@
 	});
 	PotreeLoader.load("./resources/paprika/metadata.json").then(pointcloud => {
 		pointcloud.position.set(0,0,0);
-		pointcloud.name = "Paprika";
+		pointcloud.name = "paprika";
+		//right i dont need it
+		//scene.root.children.push(pointcloud);
+		
+	});
+
+	PotreeLoader.load("./resources/pot/dense/metadata.json").then(pointcloud => {
+		pointcloud.position.set(0,0,0);
+		pointcloud.name = "pot";
 
 		scene.root.children.push(pointcloud);
+		
+	});
+
+	PotreeLoader.load("./resources/sugar/dense/metadata.json").then(pointcloud => {
+		pointcloud.position.set(0,0,0);
+		pointcloud.name = "sugar";
+
+		//scene.root.children.push(pointcloud);
+		
+	});
+	PotreeLoader.load("./resources/parcel/dense/metadata.json").then(pointcloud => {
+		pointcloud.position.set(0,0,0);
+		pointcloud.name = "parcel";
+
+		//scene.root.children.push(pointcloud);
+		
+	});
+	PotreeLoader.load("./resources/hutSunny/dense/metadata.json").then(pointcloud => {
+		pointcloud.position.set(0,0,0);
+		pointcloud.name = "hutSunny";
+
+		//scene.root.children.push(pointcloud);
+		
+	});
+	PotreeLoader.load("./resources/hutCloudy/dense/metadata.json").then(pointcloud => {
+		pointcloud.position.set(0,0,0);
+		pointcloud.name = "hutCloudy";
+
+		//scene.root.children.push(pointcloud);
 		
 	});
 

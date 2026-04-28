@@ -22,7 +22,16 @@ class Point3D(BaseModel):
 class HullRequest(BaseModel):
     points: List[Point3D]
     alpha: float
+    surface: bool
 
+ALPHA_ADVFRONTSURFACE_EXE_PATH = os.path.join(
+    os.path.dirname(__file__),
+    "CAlphaShapes",
+    "build",
+    "Release",
+	"alphaShaperRetroFit.exe",
+    #"alphaShaper.exe",
+)
 ALPHA_EXE_PATH = os.path.join(
     os.path.dirname(__file__),
     "CAlphaShapes",
@@ -36,10 +45,15 @@ def alpha3d_cgal(req: HullRequest):
     payload = {
         "points": [p.model_dump() for p in req.points],
         "alpha": req.alpha,
+		"surface": req.surface,
     }
 
+	#Reintroduce this path if you want advancing front surface reconstruction by CGAL.
+    #print(ALPHA_EXE_PATH if not req.surface else ALPHA_ADVFRONTSURFACE_EXE_PATH)
+
     proc = subprocess.Popen(
-        [ALPHA_EXE_PATH],
+		[ALPHA_EXE_PATH],
+        #[ALPHA_EXE_PATH if not req.surface else ALPHA_ADVFRONTSURFACE_EXE_PATH],
         stdin=subprocess.PIPE,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,

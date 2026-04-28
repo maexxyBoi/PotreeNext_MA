@@ -235,15 +235,16 @@ function addClickListener(elPanel){
 			measure.useSphere = e.target.checked;
 			measure.isCalculated = false;
 		}
-		if(e.target && e.target.id === "innerCalc"){
+		if(e.target && (e.target.id === "innerCalc") || (e.target.id === "surfCalc")){
 			console.log("innerCalc clicked");
 
 			let elBlock = e.target.closest("div");
 			let elDropdown = elBlock.getElementsByTagName("select")
 			let checkForFloor = elBlock.getElementsByTagName("input")[0].checked
 			let id = elBlock.dataset.measureid
+			let isSurface =  e.target.id === "surfCalc" ? true : false;
 
-			calculateInnerVolume(id, elDropdown, checkForFloor)
+			calculateInnerVolume(id, elDropdown, checkForFloor, isSurface)
 		}
 		if (e.target && e.target.id === "innerOption") {
 			console.log("Dropdown changed");
@@ -388,46 +389,12 @@ function concaveSlicing(newBounds, pointClouds, measure, isSurface){
 	let pointSets = extractPoints(slices, pointClouds, newBounds, measure);
     const mergedPoints = [];
     for (const set of pointSets) {
-        for (const p of set) {
+        for (const p of set) {	
             mergedPoints.push(p);
         }
     }
-/*
-    // add ground floor if checkbox is checked
-	//we want to be able to get a volume of stuff that has unknown volume
-	//toward the ground, thats why we just add points at the bottom to get
-	//basically "ground/soil/rock/whatever is underneath" volume.
-	if(checkForFloor){
-        const bottomZ = newBounds.min.z;
-
-        // grid resolution on the floor plane
-        const step = newBounds.getSize(new Vector3()).length() / 50;
-
-        pointSets = pointSets.map(points => {
-            if (points.length === 0) return points;
-
-            // XY bounds of *real* points in this slice
-            let minX =  Infinity, maxX = -Infinity;
-            let minY =  Infinity, maxY = -Infinity;
-            for (const p of points) {
-                if (p.x < minX) minX = p.x;
-                if (p.x > maxX) maxX = p.x;
-                if (p.y < minY) minY = p.y;
-                if (p.y > maxY) maxY = p.y;
-            }
-
-            // build a grid at bottomZ only under that XY rectangle
-            const floor = [];
-            for (let x = minX; x <= maxX; x += step) {
-                for (let y = minY; y <= maxY; y += step) {
-                    floor.push(new Vector3(x, y, bottomZ));
-                }
-            }
-            return points.concat(floor);
-        });
-	}*/
-	// fire-and-forget; alphaShape fills debugCgalTriangles
-	alphaShape([mergedPoints], newBounds, isSurface);
+	console.log("Total points extracted for alpha shape: ", mergedPoints.length);
+	alphaShape([mergedPoints], newBounds, isSurface, measure);
 
 
 }
@@ -467,7 +434,7 @@ function isPointInSelection(pos, bounds, measure){
 //are picked. TODO
 //REFUNCTIONED TO EXTRACT POINTS FROM SPHERICAL MEASURING.
 //old code will be here for slicing too, but be aware of that, this function
-// has two purposes.
+// has two purposes. anyway i wouldnt want to slice a sphere
 function extractPoints(slices, pointClouds, newBounds, measure)
 {
     debugPickedPoints.length = 0;
@@ -484,7 +451,17 @@ function extractPoints(slices, pointClouds, newBounds, measure)
 				{
 					const point = node.getPoint(i);
 					const pos = point.position;
-					if (checkIfInSlice(pos, newBounds)) {
+					const center = measure.markers[0];
+					const radius = Math.max(0, Number(measure.sphereRadius) || 0);
+					if(measure?.useSphere && measure.markers.length > 0 && pos.distanceTo(center) <= radius){
+						const pClone = pos.clone();
+						pointSets.push(pClone);
+						/*debugPickedPoints.push({
+							position: pClone,
+							color: new Vector3(255, 0, 0),
+						});*/
+					}
+					if (!measure?.useSphere && checkIfInSlice(pos, newBounds)) {
 						const pClone = pos.clone();
 						pointSets.push(pClone);
 						//compute intense 
@@ -566,7 +543,7 @@ function checkIfInSlice(pos, slice){
 
 //On the frontend it is called concave hull bcs usually, we want
 //a concave hull for volume comp even tho i use an alpha shape lib for flexibility
-async function alphaShape(pointSets, newBounds, isSurface) {
+async function alphaShape(pointSets, newBounds, isSurface, measure) {
     // clear previous CGAL debug triangles
     debugCgalTriangles.length = 0;
 	let totalVolume = 0;
@@ -574,12 +551,9 @@ async function alphaShape(pointSets, newBounds, isSurface) {
         if (pointSet.length < 4) {
             continue;
         }
-		let floorAndObject = addSyntheticFloor(pointSet, newBounds);
+		let floorAndObject = addSyntheticFloor(pointSet, newBounds, measure);
 
-		//i wont need a floor to make the object "watertight" if i just want the surface
-		if(!isSurface){ 
-			pointSet = floorAndObject;
-		}
+		pointSet = floorAndObject;
 		//Debugging of above function that should add a floor
 		/*floorAndObject.forEach(p => {
 			debugPickedPoints.push({
@@ -587,7 +561,7 @@ async function alphaShape(pointSets, newBounds, isSurface) {
 				color: new Vector3(0, 255, 255),
 			});
 		});*/
-		const alpha = .7
+		const alpha = 3.0
         const shape = await fetchAlphaShape(pointSet, alpha, isSurface);
           if (!shape || shape.error ) {
               continue;
@@ -603,13 +577,13 @@ async function alphaShape(pointSets, newBounds, isSurface) {
 						color = 0;
 					}
 					triColor = debugColors[color++]
-					debugCgalTriangles.push({
+					/*debugCgalTriangles.push({
 					a: new Vector3(tet[0].x, tet[0].y, tet[0].z),
 					b: new Vector3(tet[1].x, tet[1].y, tet[1].z),
 					c: new Vector3(tet[2].x, tet[2].y, tet[2].z),
 					d: new Vector3(tet[3].x, tet[3].y, tet[3].z),
 					triColor: triColor,
-				});
+				});*/
 			}
 		  }
 		  if (shape.triangles) {
@@ -628,12 +602,25 @@ async function alphaShape(pointSets, newBounds, isSurface) {
 			}
           }
 		console.log("Time taken: ", shape.timing_ms);
+		console.log("Chosen Alpha: ", shape.used_alpha);
 		console.log("Result: ", (!isSurface ? "Volume " + shape.volume : "Surface " + shape.area));
       }
   }
 
-function addSyntheticFloor(points, bounds) {
-
+function addSyntheticFloor(points, bounds, measure) {
+	let floorZ = new Vector3(0,0,0);
+	// i dont want an auxilliary floor for volume calc
+	//that is at the bottom of a sphere. that is not even
+	//unintuitive but unhelpful. instead, i insert the aux.
+	//floor at the center. which is slightly less unhelpful.
+	if (measure.useSphere)
+	{
+		floorZ = measure.markers[0].z;
+	}
+	else {
+		//watch out for cloud orientation please
+		floorZ = bounds.min.z;
+	}
 	/*debugPickedPoints.push({
 		position: bounds.min.clone(),
 		color: new Vector3(255, 255, 0),
@@ -642,10 +629,7 @@ function addSyntheticFloor(points, bounds) {
 		position: bounds.max.clone(),
 		color: new Vector3(255, 0, 0),
 	});*/
-	//ok for some weird reason min and max are changed (intuitively speaking)
-	    const floorZ = bounds.max.z;
-
-    // 2) Estimate spacing from data density
+    // Estimate spacing from data density
     const n = Math.min(points.length, 30);
     let minDist = Infinity;
     for (let i = 0; i < n; i++) {
@@ -658,26 +642,52 @@ function addSyntheticFloor(points, bounds) {
         }
     }
     const step = Math.max(Math.sqrt(minDist) * 1.5, 0.005);
-
-    // 3) Footprint in XY from object points
-    let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
-    for (const p of points) {
-        if (p.x < minX) minX = p.x;
-        if (p.x > maxX) maxX = p.x;
-        if (p.y < minY) minY = p.y;
-        if (p.y > maxY) maxY = p.y;
-    }
-
-    // 4) Add 2-3 thin layers to stabilize tetrahedralization
-    const eps = step * 0.2;
-    //const layers = [floorZ - eps, floorZ, floorZ + eps];
-	const layers = [floorZ];
-
     const floorPts = [];
-    for (const z of layers) {
-        for (let x = minX; x <= maxX; x += step) {
-            for (let y = minY; y <= maxY; y += step) {
-                floorPts.push(new Vector3(x, y, z));
+
+    if (measure.useSphere && measure.markers.length > 0) {
+        // Generate circular floor pattern for sphere mode
+        const center = measure.markers[0];
+        const sphereRadius = Math.max(0, Number(measure.sphereRadius) || 0);
+        
+        // Create concentric circles from center to edge
+        const numRings = Math.max(2, Math.ceil(sphereRadius / step));
+        for (let ring = 0; ring <= numRings; ring++) {
+            const currentRadius = (ring / numRings) * sphereRadius;
+            
+            if (currentRadius < step * 0.5) {
+                // Center point (avoid duplicate)
+                floorPts.push(new Vector3(center.x, center.y, floorZ));
+            } else {
+                // Points around the circle
+                const circumference = 2 * Math.PI * currentRadius;
+                const numPoints = Math.max(6, Math.ceil(circumference / step));
+                for (let i = 0; i < numPoints; i++) {
+                    const angle = (2 * Math.PI * i) / numPoints;
+                    const x = center.x + currentRadius * Math.cos(angle);
+                    const y = center.y + currentRadius * Math.sin(angle);
+                    floorPts.push(new Vector3(x, y, floorZ));
+                }
+            }
+        }
+    } else {
+        // Original rectangular grid for cube mode
+        let minX = Infinity, maxX = -Infinity, minY = Infinity, maxY = -Infinity;
+        for (const p of points) {
+            if (p.x < minX) minX = p.x;
+            if (p.x > maxX) maxX = p.x;
+            if (p.y < minY) minY = p.y;
+            if (p.y > maxY) maxY = p.y;
+        }
+
+        // Add thin layer to stabilize tetrahedralization
+        const eps = step * 0.2;
+        const layers = [floorZ];
+
+        for (const z of layers) {
+            for (let x = minX; x <= maxX; x += step) {
+                for (let y = minY; y <= maxY; y += step) {
+                    floorPts.push(new Vector3(x, y, z));
+                }
             }
         }
     }

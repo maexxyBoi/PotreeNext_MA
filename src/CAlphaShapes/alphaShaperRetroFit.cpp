@@ -25,6 +25,8 @@ typedef K::Vector_3 											Vector_3;
 
 int main() {
     json in;
+	const std::size_t OUTPUT_STRIDE = 10;
+	std::size_t facet_idx = 0;
     try {
         std::cin >> in;
     } catch (const std::exception& e) {
@@ -80,11 +82,14 @@ int main() {
 			CGAL::to_double(CGAL::squared_area(points[0], points[1], points[2])));
 		area += triArea;
 		//one entry: one triangle
-		json tri = json::array();
-		tri.push_back({{"x", points[0].x()}, {"y", points[0].y()}, {"z", points[0].z()}});
-		tri.push_back({{"x", points[1].x()}, {"y", points[1].y()}, {"z", points[1].z()}});
-		tri.push_back({{"x", points[2].x()}, {"y", points[2].y()}, {"z", points[2].z()}});
-		triangles.push_back(tri);
+		if ((facet_idx++ % OUTPUT_STRIDE) == 0) {
+			json tri = json::array();
+			tri.push_back({ {"x", p0.x()}, {"y", p0.y()}, {"z", p0.z()} });
+			tri.push_back({ {"x", p1.x()}, {"y", p1.y()}, {"z", p1.z()} });
+			tri.push_back({ {"x", p2.x()}, {"y", p2.y()}, {"z", p2.z()} });
+			triangles.push_back(tri);
+		}
+
 		}
 	}
 //time taken

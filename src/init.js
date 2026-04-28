@@ -640,7 +640,8 @@ function renderNotSoBasic(){
 		let searchWindow = 3;
 		let wh = searchWindow / 2;
 
-		//Just for the gaussians, exquisite picking c:===============
+		//Just for the GAUSSIANS, exquisite picking c:===============
+		
 		//Ok i know i just captured and changed the picking for regular
 		//Pointclouds. but i just adapted gaussians.wgsl so
 		//That the pixel being hovered, returns their VIEW-pos
@@ -986,7 +987,7 @@ function renderNotSoBasic(){
 	for (let i = 0; i < n; i++) {
 		const { position, color } = debugPickedPoints[i];
 		const depth = camPos.distanceTo(position);
-		const radius = depth / 100; // tweak size
+		const radius = depth / 400; // tweak size
 
 		renderer.drawSphere(
 			position,
@@ -1009,6 +1010,14 @@ function renderNotSoBasic(){
 		renderer.drawLine(b, c, triColor);
 		renderer.drawLine(c, a, triColor);
 	}
+	/*for (let i = 0; i < triCount; i++) {
+		const { a, b, c, d, triColor } = debugCgalTriangles[i];
+		renderer.drawSphere(a, .001);
+		renderer.drawSphere(b, .001);
+		renderer.drawSphere(c, .001);
+		renderer.drawSphere(d, .001);
+
+	}*/
 }
 
 

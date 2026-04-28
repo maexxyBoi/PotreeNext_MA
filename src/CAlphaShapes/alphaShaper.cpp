@@ -33,6 +33,12 @@ typedef Alpha_shape_3::Facet                               Facet;
 
 int main() {
     json in;
+	//unfortunately the amount of faces / tetrahedra
+	//when computing for a dense cloud are so enormous that 
+	//i need to cut out some.
+	const std::size_t OUTPUT_STRIDE = 10;
+	std::size_t interior_idx = 0;
+	std::size_t facet_idx = 0;
     try {
         std::cin >> in;
     } catch (const std::exception& e) {
@@ -123,14 +129,15 @@ int main() {
 				const Point& p1 = cit->vertex(1)->point();
 				const Point& p2 = cit->vertex(2)->point();
 				const Point& p3 = cit->vertex(3)->point();
-				json tri = json::array();
-				tri.push_back({ {"x", p0.x()}, {"y", p0.y()}, {"z", p0.z()} });
-				tri.push_back({ {"x", p1.x()}, {"y", p1.y()}, {"z", p1.z()} });
-				tri.push_back({ {"x", p2.x()}, {"y", p2.y()}, {"z", p2.z()} });
-				tri.push_back({ {"x", p3.x()}, {"y", p3.y()}, {"z", p3.z()} });
-				i++;
-				tetrahedrons.push_back(tri);
-				// CGAL has a tetrahedron volume helper:
+				if ((interior_idx++ % OUTPUT_STRIDE) == 0) {
+					json tet = json::array();
+					tet.push_back({ {"x", p0.x()}, {"y", p0.y()}, {"z", p0.z()} });
+					tet.push_back({ {"x", p1.x()}, {"y", p1.y()}, {"z", p1.z()} });
+					tet.push_back({ {"x", p2.x()}, {"y", p2.y()}, {"z", p2.z()} });
+					tet.push_back({ {"x", p3.x()}, {"y", p3.y()}, {"z", p3.z()} });
+					tetrahedrons.push_back(tet);
+				}				
+			// CGAL has a tetrahedron volume helper:
 				double v = CGAL::to_double(CGAL::volume(p0, p1, p2, p3));
 				volume += v;
 			}
@@ -164,12 +171,14 @@ int main() {
 			double triArea = 0.5 * std::sqrt(CGAL::to_double(cross.squared_length()));
 			area += triArea;
 
-			json tri = json::array();
-			tri.push_back({ {"x", p0.x()}, {"y", p0.y()}, {"z", p0.z()} });
-			tri.push_back({ {"x", p1.x()}, {"y", p1.y()}, {"z", p1.z()} });
-			tri.push_back({ {"x", p2.x()}, {"y", p2.y()}, {"z", p2.z()} });
-			triangles.push_back(tri);
-    	}
+			if ((facet_idx++ % OUTPUT_STRIDE) == 0) {
+				json tri = json::array();
+				tri.push_back({ {"x", p0.x()}, {"y", p0.y()}, {"z", p0.z()} });
+				tri.push_back({ {"x", p1.x()}, {"y", p1.y()}, {"z", p1.z()} });
+				tri.push_back({ {"x", p2.x()}, {"y", p2.y()}, {"z", p2.z()} });
+				triangles.push_back(tri);
+			}    	
+		}
 	}
 	auto afterResultPushOut = Clock::now();
 	out["timing_ms"] = std::chrono::duration_cast<std::chrono::milliseconds>(

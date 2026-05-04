@@ -241,6 +241,14 @@ export class InnerVolMeasure extends Measure{
                 <br></br>
                 <button id="innerCalc">Calculate Volume</button>
                 <button id="surfCalc">Calculate Surface</button>
+                <label style="display:block;">
+                Alpha:
+                <input id="alphaInput"
+					type="number"
+                    class="alphaInput"
+                    step="0.01"
+                    value="1.0">
+                </label>
             </div>
             `;
         } else {

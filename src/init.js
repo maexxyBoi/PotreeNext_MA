@@ -980,7 +980,7 @@ function renderNotSoBasic(){
 	//FIXME DEBUGGING----------------------------------------------------------
 	const camPos = controls.getPosition();
 	const MAX_DEBUG_SPHERES = 10000; // tweak as needed
-	const MAX_DEBUG_TRIS = 200000;
+	const MAX_DEBUG_TRIS = 1000000;
 	const n = Math.min(debugPickedPoints.length, MAX_DEBUG_SPHERES);
 /* 	console.log("debugPickedPoints:", debugPickedPoints.length);
  */

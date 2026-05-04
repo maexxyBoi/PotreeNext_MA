@@ -124,7 +124,7 @@ async function init(renderer){
 		});
 
 		// Fetch shader source from external file
-		let shaderPath = `${import.meta.url}/../gaussians.wgsl?t=${Date.now()}`;
+		let shaderPath = `${import.meta.url}/../gaussiansOrigFix.wgsl?t=${Date.now()}`;
 		console.log("Fetching main shader:", shaderPath);
 		let response = await fetch(shaderPath);
 		if (!response.ok) {

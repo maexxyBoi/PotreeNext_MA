@@ -243,8 +243,9 @@ function addClickListener(elPanel){
 			let checkForFloor = elBlock.getElementsByTagName("input")[0].checked
 			let id = elBlock.dataset.measureid
 			let isSurface =  e.target.id === "surfCalc" ? true : false;
+			let alpha = elBlock.getElementsByTagName("input")[8].value;
 
-			calculateInnerVolume(id, elDropdown, checkForFloor, isSurface)
+			calculateInnerVolume(id, elDropdown, checkForFloor, isSurface, alpha);
 		}
 		if (e.target && e.target.id === "innerOption") {
 			console.log("Dropdown changed");
@@ -309,7 +310,7 @@ export async function installSidebar(elPotree, potree){
 }
 
 
-function calculateInnerVolume(id, elDropdown, checkForFloor, isSurface)
+function calculateInnerVolume(id, elDropdown, checkForFloor, isSurface, alpha)
 {
 	let measures = potree.measure.measures
 	let measure = measures[Number(id) - 1] //actual number to index
@@ -326,7 +327,7 @@ function calculateInnerVolume(id, elDropdown, checkForFloor, isSurface)
 
 	if (option === sliceString){
 		console.log(sliceString)
-		concaveSlicing(newBounds, pointClouds, measure, isSurface)
+		concaveSlicing(newBounds, pointClouds, measure, isSurface, alpha)
 	}
 	if (option === octreesString){
 		console.log(octreesString)
@@ -340,7 +341,7 @@ function calculateInnerVolume(id, elDropdown, checkForFloor, isSurface)
 	}
 }
 
-function concaveSlicing(newBounds, pointClouds, measure, isSurface){
+function concaveSlicing(newBounds, pointClouds, measure, isSurface, alpha){
 
 	//test
 	//console.log(newBounds);
@@ -394,7 +395,7 @@ function concaveSlicing(newBounds, pointClouds, measure, isSurface){
         }
     }
 	console.log("Total points extracted for alpha shape: ", mergedPoints.length);
-	alphaShape([mergedPoints], newBounds, isSurface, measure);
+	alphaShape([mergedPoints], newBounds, isSurface, measure, alpha);
 
 
 }
@@ -543,7 +544,7 @@ function checkIfInSlice(pos, slice){
 
 //On the frontend it is called concave hull bcs usually, we want
 //a concave hull for volume comp even tho i use an alpha shape lib for flexibility
-async function alphaShape(pointSets, newBounds, isSurface, measure) {
+async function alphaShape(pointSets, newBounds, isSurface, measure, alpha) {
     // clear previous CGAL debug triangles
     debugCgalTriangles.length = 0;
 	let totalVolume = 0;
@@ -561,8 +562,7 @@ async function alphaShape(pointSets, newBounds, isSurface, measure) {
 				color: new Vector3(0, 255, 255),
 			});
 		});*/
-		const alpha = 3.0
-        const shape = await fetchAlphaShape(pointSet, alpha, isSurface);
+		const shape = await fetchAlphaShape(pointSet, alpha, isSurface);
           if (!shape || shape.error ) {
               continue;
           }
@@ -630,6 +630,7 @@ function addSyntheticFloor(points, bounds, measure) {
 		color: new Vector3(255, 0, 0),
 	});*/
     // Estimate spacing from data density
+	//TODO fixed it for 30 for now
     const n = Math.min(points.length, 30);
     let minDist = Infinity;
     for (let i = 0; i < n; i++) {
@@ -655,10 +656,9 @@ function addSyntheticFloor(points, bounds, measure) {
             const currentRadius = (ring / numRings) * sphereRadius;
             
             if (currentRadius < step * 0.5) {
-                // Center point (avoid duplicate)
                 floorPts.push(new Vector3(center.x, center.y, floorZ));
-            } else {
-                // Points around the circle
+            }
+			else {
                 const circumference = 2 * Math.PI * currentRadius;
                 const numPoints = Math.max(6, Math.ceil(circumference / step));
                 for (let i = 0; i < numPoints; i++) {
